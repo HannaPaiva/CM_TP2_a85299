@@ -1,0 +1,17 @@
+<svg width="180" height="260" viewBox="0 0 180 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="6" y="6" width="168" height="248" rx="18" fill="#B54708" stroke="#FFE6C4" stroke-width="6"/>
+  <rect x="18" y="18" width="144" height="224" rx="14" fill="url(#sunrise)" stroke="#FFF7ED" stroke-width="3"/>
+  <circle cx="90" cy="116" r="30" fill="#FED7AA"/>
+  <path d="M32 184C50 154 70 140 90 140C110 140 130 154 148 184" stroke="#FFF7ED" stroke-width="8" stroke-linecap="round"/>
+  <path d="M40 194H140" stroke="#FDE68A" stroke-width="8" stroke-linecap="round"/>
+  <path d="M48 214H132" stroke="#FDBA74" stroke-width="8" stroke-linecap="round"/>
+  <path d="M90 48V72M52 68L66 82M128 68L114 82" stroke="#FFF7ED" stroke-width="5" stroke-linecap="round"/>
+  <defs>
+    <linearGradient id="sunrise" x1="18" y1="18" x2="162" y2="242" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EA580C"/>
+      <stop offset="0.6" stop-color="#C2410C"/>
+      <stop offset="1" stop-color="#7C2D12"/>
+    </linearGradient>
+  </defs>
+</svg>
+

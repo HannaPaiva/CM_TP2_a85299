@@ -1,0 +1,7 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="256" rx="56" fill="#1C6E57"/>
+  <rect x="48" y="38" width="160" height="180" rx="24" fill="#FFF9F0" stroke="#D8D0C2" stroke-width="8"/>
+  <path d="M128 70L150 104H106L128 70Z" fill="#B42318"/>
+  <path d="M128 104L160 150H96L128 104Z" fill="#D92D20"/>
+  <text x="128" y="198" font-size="42" text-anchor="middle" fill="#1C6E57" font-family="Trebuchet MS, sans-serif" font-weight="700">S</text>
+</svg>
