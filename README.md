@@ -1,39 +1,46 @@
 # Solitaire Atelier
 
-Aplicação desenvolvida em Python com Flet para o TP2 de Computação Móvel. O projeto implementa um Klondike Solitaire completo numa única app, com suporte para desktop, tablet e telemóvel, e inclui todos os tópicos pedidos no enunciado para a variante `Solitaire`.
+Aplicacao desenvolvida em Python com Flet para o TP2 de Computacao Movel. O projeto parte de uma base de Klondike Solitaire e acrescenta as funcionalidades pedidas nos objetivos 2 e 3 do enunciado: controlo de partida, persistencia, pontuacao, personalizacao visual, niveis de dificuldade e estrutura para modos de jogo distintos. A interface foi reorganizada para seguir a ideia do Solitaire & Casual Games do Windows, com um tabuleiro central, painel de informacao sempre visivel e um menu hamburger no canto superior esquerdo que concentra todas as opcoes principais.
 
-## Funcionalidades obrigatórias implementadas
+## Funcionalidade 1: controlo de partida e recuperacao de jogadas
 
-- Base do jogo Solitaire em Flet, com stock, waste, fundações e tableau.
-- Reiniciar a partida atual e criar um novo jogo aleatório.
-- Desfazer jogadas (`undo`).
-- Guardar e carregar o estado localmente.
-- Escolher a imagem traseira das cartas entre 4 opções.
-- Sistema de pontuação com cronómetro sempre visível.
-- Layout responsivo com redimensionamento automático do tabuleiro.
+Uma das inclusoes mais importantes foi o conjunto de ferramentas de controlo da partida: novo jogo, reinicio da distribuicao atual e desfazer jogadas. Esta decisao foi motivada por duas necessidades muito claras. Em primeiro lugar, estas acoes fazem parte da expectativa normal de quem joga Solitaire em plataformas modernas, sobretudo quando o objetivo e aproximar a experiencia do que existe no ecossistema Windows. Em segundo lugar, permitem demonstrar que a aplicacao nao se limita a animar cartas no ecra, mas possui um modelo de estado consistente, capaz de reconstruir uma jogada anterior com rigor. O sistema de `undo` foi implementado com snapshots completos do tabuleiro antes de cada acao relevante, o que inclui movimentos entre tableau, waste e fundacoes, compra de cartas do stock e reciclagem da waste. Desta forma, o restauro nao depende de inferencias parciais e o comportamento mantem-se previsivel.
 
-## Funcionalidade extra 1: Motor de dicas contextual
+O reinicio da partida nao cria um novo baralho aleatorio; em vez disso, repoe a distribuicao inicial da partida corrente. Isto e relevante porque o utilizador pode experimentar estrategias diferentes sem perder o mesmo arranque de jogo. O menu hamburger reune estas opcoes num unico local, reduzindo ruido visual no tabuleiro e favorecendo a utilizacao em telemovel e tablet. A nivel de usabilidade, esta funcionalidade melhora bastante a experiencia porque reduz a frustracao causada por um erro de toque ou por uma jogada precipitada. Em termos de avaliacao, mostra tambem capacidade de gerir historico de estados, de restaurar a interface de forma coerente e de manter a logica do jogo sincronizada com a apresentacao visual.
 
-Escolhi implementar um motor de dicas porque é uma funcionalidade verdadeiramente útil num jogo de Solitaire e, ao mesmo tempo, permite demonstrar raciocínio por cima das regras do jogo, em vez de apenas acrescentar um elemento visual. O objetivo não foi mostrar uma ajuda genérica, mas sim criar um sistema que analisa o estado atual da mesa e escolhe uma jogada concreta com valor estratégico. Para isso, a aplicação avalia possíveis movimentos entre tableau, waste e fundações, atribuindo prioridades diferentes a cada cenário. Jogadas que revelam cartas escondidas recebem mais peso, assim como movimentos para a fundação ou a utilização de colunas vazias com Reis. Desta forma, a dica apresentada não é aleatória: ela tenta favorecer jogadas que aumentam a probabilidade de desbloquear a partida.
+## Funcionalidade 2: persistencia com DuckDB e local storage
 
-Na interface, a funcionalidade foi integrada de forma clara. Quando o utilizador carrega em `Dica`, a aplicação destaca a carta de origem e a área de destino, ao mesmo tempo que apresenta uma pequena explicação textual no painel lateral. Isto torna a ajuda mais pedagógica, porque o jogador percebe não só o que pode fazer, mas também porque essa jogada é relevante. Em termos de usabilidade, esta solução funciona bem tanto em ecrãs grandes como em mobile, já que o painel se adapta ao espaço disponível e o destaque visual mantém-se dentro do tabuleiro. Considerei esta funcionalidade relevante porque melhora a experiência de aprendizagem, reduz frustração em partidas difíceis e dá à aplicação um comportamento mais inteligente, indo além do mínimo exigido.
+A persistencia da partida foi pensada como uma funcionalidade central do objetivo 2, e nao como um simples extra acessorio. O enunciado pede explicitamente que o estado do jogo possa ser guardado e carregado a partir de DuckDB e local storage, por isso a implementacao foi desenhada para usar ambos os mecanismos em paralelo. Sempre que o utilizador escolhe guardar a partida, o tabuleiro atual e serializado para um snapshot completo com cartas no stock, waste, tableau e fundacoes, cartas viradas para cima ou para baixo, seed da partida, pontuacao, tempo decorrido, dificuldade, modo de jogo, back selecionado e tema visual. Esse snapshot e escrito para uma base `DuckDB` local e tambem para o armazenamento persistente do cliente via `SharedPreferences` do Flet. No carregamento, a aplicacao tenta recuperar primeiro a versao em DuckDB e, caso nao exista, utiliza o estado em local storage.
 
-## Funcionalidade extra 2: Desafio diário com estatísticas persistentes
+O motivo para incluir os dois mecanismos foi garantir redundancia e demonstrar um fluxo de persistencia mais completo. O `DuckDB` cumpre a exigencia tecnologica do enunciado e oferece um armazenamento estruturado no disco, enquanto o local storage ajuda a manter uma copia leve e imediata das preferencias e do ultimo estado salvo. A vantagem pratica para o utilizador e evidente: uma partida pode ser interrompida e retomada sem perder progresso, mesmo depois de fechar a aplicacao. Esta funcionalidade tambem reforca a percecao de produto acabado, porque o jogo deixa de ser efemero e passa a acompanhar o utilizador entre sessoes. Para efeitos de demonstracao, o menu inclui botoes diretos de guardar e carregar, com mensagens de estado que explicam de onde foi recuperada a partida e se algum dos mecanismos ficou indisponivel.
 
-A segunda funcionalidade escolhida foi o `Desafio diário`, acompanhada por um painel de estatísticas persistentes. A ideia foi aproximar a aplicação de experiências modernas de jogos casuais, onde existe um objetivo renovado todos os dias e uma motivação adicional para regressar. Em vez de gerar apenas jogos aleatórios, a aplicação consegue iniciar uma partida diária com uma seed determinística baseada na data. Isso significa que, num mesmo dia, todos os dispositivos recebem exatamente a mesma distribuição de cartas. Esta abordagem introduz um elemento competitivo e de rotina que não existe num Solitaire básico, e torna a aplicação mais interessante do ponto de vista de produto.
+## Funcionalidade 3: pontuacao, cronometro e modos de jogo
 
-Para complementar o desafio, foram adicionadas estatísticas guardadas localmente: vitórias totais, melhor pontuação, melhor tempo, número total de dicas pedidas e sequência diária concluída. Sempre que o utilizador vence, estes dados são atualizados automaticamente. No caso do desafio diário, a aplicação calcula também a sequência de dias concluídos, incentivando uma utilização continuada. Esta funcionalidade foi incluída porque acrescenta profundidade sem prejudicar a simplicidade do jogo principal. O jogador pode continuar a usar o modo livre normalmente, mas tem também um objetivo diário e métricas concretas de progresso. Em contexto de avaliação, esta escolha mostra iniciativa, persistência de dados e integração de mecânicas adicionais num fluxo único e coerente, tal como é pedido no enunciado.
+O sistema de pontuacao com cronometro visivel durante toda a partida foi incluido para aproximar a app do comportamento esperado num Solitaire moderno e para dar mais contexto ao progresso do jogador. O cronometro corre continuamente enquanto a partida esta ativa e para de evoluir quando o jogador vence. A pontuacao muda de acordo com o tipo de movimento, privilegiando jogadas uteis como mover cartas para a fundacao, tirar cartas da waste para o tableau e revelar novas cartas no tableau. Isto cria um feedback constante e torna a partida mais legivel, porque cada acao deixa de ser apenas visual e passa a ter peso numerico. Alem disso, o cronometro e a pontuacao ajudam a comparar desempenhos entre partidas, sobretudo quando se experimentam dificuldades diferentes.
 
-## Estratégia de responsividade
+Esta base de scoring foi tambem usada para suportar modos de jogo diferentes. Para responder ao objetivo 3, nao bastava acrescentar um seletor cosmetico; era importante deixar a arquitetura preparada para regras distintas. O projeto passa agora a suportar pelo menos dois modos: `Classico` e `Vegas`. No modo classico, a pontuacao segue uma logica inspirada no Solitaire do Windows. No modo Vegas, a partida arranca com penalizacao inicial e as fundacoes passam a ter um peso monetizado, o que altera a forma como o jogador interpreta risco e progresso. Mesmo que o trabalho se concentre em Klondike, a separacao entre `difficulty` e `game_mode` deixa o codigo preparado para acrescentar mais variantes no futuro sem reescrever o tabuleiro. Esta funcionalidade foi escolhida porque acrescenta profundidade real ao jogo, demonstra extensibilidade e responde de forma direta ao pedido de “deixar espaco para diferentes modos de jogo”.
 
-Em vez de usar dimensões fixas, o tabuleiro recalcula automaticamente a largura das cartas, alturas, espaçamentos e offsets das colunas de acordo com o espaço disponível. Esta abordagem permite manter a mesma lógica de jogo em desktop, tablet e telemóvel, sem criar versões diferentes da interface. O painel de controlo também muda de comportamento: em ecrãs largos fica ao lado do tabuleiro; em ecrãs mais estreitos passa para baixo, preservando legibilidade e área útil para o jogo.
+## Funcionalidade 4: personalizacao visual com backs e temas independentes
 
-## Como executar
+A personalizacao visual foi tratada como a segunda grande funcionalidade nova do objetivo 3. O enunciado pedia a possibilidade de escolher entre quatro imagens traseiras para as cartas e, para alem disso, o utilizador queria poder mudar o tema da janela de jogo como um todo, mantendo a liberdade de alterar apenas o back ou apenas o tema do tabuleiro. Para cumprir esse pedido, o menu hamburger passou a disponibilizar duas secoes independentes: uma para os backs e outra para os temas. Os quatro backs usam diretamente os assets fornecidos em `solitaire/assets/backs`, o que garante coerencia com o material do projeto. Em paralelo, foram criados quatro temas de tabuleiro que combinam com esses backs, mas sem ficarem rigidamente acoplados a eles.
+
+Esta separacao tem uma justificacao clara em termos de experiencia de utilizacao. Se o back e o tema estivessem sempre ligados, a personalizacao seria artificial e limitada. Ao permitir a escolha independente, o utilizador pode criar combinacoes mais classicas, mais contrastadas ou mais ousadas, de acordo com a preferencia pessoal e com as condicoes do dispositivo onde esta a jogar. Para que a alteracao seja realmente percebida como “tema da janela”, a mudanca nao se limita ao tabuleiro: o fundo da pagina, o cabecalho, o painel lateral e os chips de informacao tambem adoptam a nova paleta. O resultado e uma aplicacao visualmente mais rica e mais proxima do que se espera de um jogo casual polido. Esta funcionalidade foi incluida porque melhora a identidade do projeto, responde diretamente ao pedido do cliente e evidencia trabalho de interface para alem da logica base do jogo.
+
+## Como utilizar
 
 1. Criar o ambiente virtual com `uv venv`.
-2. Instalar as dependências do projeto com `uv sync`.
-3. Executar com `uv run main.py`.
+2. Instalar as dependencias com `uv sync`.
+3. Executar a app com `uv run solitaire/main.py` ou `uv run flet run .\solitaire\main.py`.
+4. Abrir o menu hamburger no canto superior esquerdo para:
+   - iniciar um novo jogo;
+   - reiniciar a distribuicao atual;
+   - desfazer a ultima jogada;
+   - guardar e carregar o estado do jogo;
+   - trocar a dificuldade;
+   - alternar entre modo Classico e Vegas;
+   - escolher um back de cartas;
+   - escolher um tema de tabuleiro independentemente do back.
 
-Em sistemas Unix-like, o `main.py` já inclui shebang compatível com `uv`, pelo que também pode ser executado diretamente depois de marcar o ficheiro como executável.
+## Nota sobre validacao
 
-Para deploy web, o projeto inclui um `fly.toml` base e assets próprios para favicon e loading screen.
+Nesta entrega, a logica e a interface foram adaptadas para comportamento responsivo, mas a validacao manual em varios dispositivos e sistemas operativos deve ser concluida durante a fase final de demonstracao do trabalho.

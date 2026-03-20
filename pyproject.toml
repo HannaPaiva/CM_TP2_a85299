@@ -5,9 +5,9 @@ description = "Klondike Solitaire em Flet para o TP2 de Computacao Movel."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "duckdb",
     "flet",
 ]
 
 [tool.uv]
 package = false
-

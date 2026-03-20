@@ -11,7 +11,8 @@ class Slot(ft.Container):
         self.height = 100
         self.left = left
         self.top = top
-        self.border_radius = ft.border_radius.all(6)
+        self.bgcolor = "#2F7851"
+        self.border_radius = ft.BorderRadius.all(6)
         self.border = border
         self.on_click = self.click
 
@@ -23,10 +24,17 @@ class Slot(ft.Container):
         n = len(self.pile)
         return self.pile[max(0, n - 3) :]
 
+    def get_top_cards(self, count):
+        n = len(self.pile)
+        return self.pile[max(0, n - count) :]
+
     def fan_top_three(self):
         for i, card in enumerate(self.get_top_three_cards()):
             card.left = self.left + self.solitaire.card_offset * i
             card.visible = True
+
+    def is_top_card(self, card):
+        return len(self.pile) > 0 and self.pile[-1] == card
 
     def upper_card_top(self):
         if self.type == "tableau":
@@ -36,5 +44,6 @@ class Slot(ft.Container):
 
     def click(self, e):
         if self.type == "stock" and self.solitaire.deck_passes_remaining > 1:
+            self.solitaire.before_action()
             self.solitaire.deck_passes_remaining -= 1
             self.solitaire.restart_stock()
