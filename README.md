@@ -30,7 +30,7 @@ Esta separacao tem uma justificacao clara em termos de experiencia de utilizacao
 
 1. Criar o ambiente virtual com `uv venv`.
 2. Instalar as dependencias com `uv sync`.
-3. Executar a app com `uv run solitaire/main.py` ou `uv run flet run .\solitaire\main.py`.
+3. Executar a app com `uv run main.py` ou `uv run flet run .\main.py`.
 4. Abrir o menu hamburger no canto superior esquerdo para:
    - iniciar um novo jogo;
    - reiniciar a distribuicao atual;

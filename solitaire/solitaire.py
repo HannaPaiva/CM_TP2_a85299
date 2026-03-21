@@ -5,18 +5,32 @@ import random
 
 import flet as ft
 
-from card import Card
-from gameboard_original import GameBoard as LegacyGameBoard
-from settings import (
-    BACK_OPTIONS,
-    DIFFICULTY_PRESETS,
-    GAME_MODES,
-    THEME_OPTIONS,
-    UNLIMITED_PASSES,
-    Settings,
-)
-from slot import Slot
-from storage import GameStorage
+try:
+    from .card import Card
+    from .gameboard_original import GameBoard as LegacyGameBoard
+    from .settings import (
+        BACK_OPTIONS,
+        DIFFICULTY_PRESETS,
+        GAME_MODES,
+        THEME_OPTIONS,
+        UNLIMITED_PASSES,
+        Settings,
+    )
+    from .slot import Slot
+    from .storage import GameStorage
+except ImportError:
+    from card import Card
+    from gameboard_original import GameBoard as LegacyGameBoard
+    from settings import (
+        BACK_OPTIONS,
+        DIFFICULTY_PRESETS,
+        GAME_MODES,
+        THEME_OPTIONS,
+        UNLIMITED_PASSES,
+        Settings,
+    )
+    from slot import Slot
+    from storage import GameStorage
 
 LOCAL_GAME_STATE_KEY = "solitaire.game_state.v2"
 

@@ -3,9 +3,14 @@ import random
 
 import flet as ft
 
-from card import Card
-from settings import GAME_MODES, Settings, UNLIMITED_PASSES
-from slot import Slot
+try:
+    from .card import Card
+    from .settings import GAME_MODES, Settings, UNLIMITED_PASSES
+    from .slot import Slot
+except ImportError:
+    from card import Card
+    from settings import GAME_MODES, Settings, UNLIMITED_PASSES
+    from slot import Slot
 
 
 class Suite:

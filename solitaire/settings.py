@@ -5,22 +5,22 @@ UNLIMITED_PASSES = 1000
 BACK_OPTIONS = {
     "classic": {
         "label": "Classic",
-        "asset": "backs/classic.svg",
+        "asset": "solitaire/assets/backs/classic.svg",
         "suggested_theme": "classic",
     },
     "forest": {
         "label": "Forest",
-        "asset": "backs/forest.svg",
+        "asset": "solitaire/assets/backs/forest.svg",
         "suggested_theme": "forest",
     },
     "ocean": {
         "label": "Ocean",
-        "asset": "backs/ocean.svg",
+        "asset": "solitaire/assets/backs/ocean.svg",
         "suggested_theme": "ocean",
     },
     "sunrise": {
         "label": "Sunrise",
-        "asset": "backs/sunrise.svg",
+        "asset": "solitaire/assets/backs/sunrise.svg",
         "suggested_theme": "sunrise",
     },
 }

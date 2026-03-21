@@ -1,6 +1,5 @@
 import flet as ft
 
-
 class Card(ft.GestureDetector):
     def __init__(self, solitaire, suite, rank):
         super().__init__()
@@ -36,7 +35,7 @@ class Card(ft.GestureDetector):
     def set_face(self, face_up, notify=True):
         self.face_up = bool(face_up)
         if self.face_up:
-            self.content.content.src = f"images/{self.card_id}.svg"
+            self.content.content.src = f"solitaire/assets/images/{self.card_id}.svg"
         else:
             self.content.content.src = self.solitaire.settings.card_back
         if notify and self.solitaire.can_update():

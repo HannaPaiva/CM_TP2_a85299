@@ -4,9 +4,9 @@ from pathlib import Path
 
 import flet as ft
 
-from gameboard_original import GameBoard
-from settings import BACK_OPTIONS, GAME_MODES, Settings, THEME_OPTIONS
-from storage import GameStorage
+from solitaire.gameboard_original import GameBoard
+from solitaire.settings import BACK_OPTIONS, GAME_MODES, Settings, THEME_OPTIONS
+from solitaire.storage import GameStorage
 
 LOCAL_GAME_STATE_KEY = "solitaire.game_state.v2"
 
@@ -17,7 +17,7 @@ def main(page: ft.Page):
     selected_game_mode = settings.game_mode
     config_return_route = "/intro"
 
-    page.title = "Solitaire Atelier"
+    page.title = "Solitaire"
     page.padding = 20
     page.scroll = ft.ScrollMode.AUTO
 
@@ -26,7 +26,7 @@ def main(page: ft.Page):
     passes_text = ft.Text(size=14, weight=ft.FontWeight.BOLD)
     status_text = ft.Text(size=14)
 
-    intro_title = ft.Text("Solitaire Atelier", size=28, weight=ft.FontWeight.BOLD)
+    intro_title = ft.Text("Solitaire", size=28, weight=ft.FontWeight.BOLD)
     intro_subtitle = ft.Text(
         "Escolhe o modo da proxima partida e entra no jogo sem mexer na gameplay.",
         size=13,
@@ -303,7 +303,9 @@ def main(page: ft.Page):
                 ft.Divider(),
                 ft.Row(
                     controls=[
-                        ft.OutlinedButton("Voltar", on_click=lambda e: navigate(config_return_route)),
+                        ft.OutlinedButton(
+                            "Voltar", on_click=lambda e: navigate(config_return_route)
+                        ),
                         ft.FilledButton("Aplicar", on_click=lambda e: apply_config()),
                     ],
                     spacing=12,
@@ -437,4 +439,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main, assets_dir=str(Path(__file__).resolve().parent / "assets"))
+    ft.run(main, assets_dir=str(Path(__file__).resolve().parent))
