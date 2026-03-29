@@ -14,10 +14,9 @@ from solitaire.custom_theme_store import (
     update_custom_theme_board_bg,
     update_custom_theme_palette,
 )
-from solitaire.gameboard_original import GameBoard
+from solitaire.gameboard import GameBoard
 from solitaire.settings import (
     BACK_OPTIONS,
-    GAME_MODES,
     Settings,
     THEME_OPTIONS,
     refresh_custom_theme_registry,
@@ -68,7 +67,6 @@ def main(page: ft.Page):
     refresh_custom_theme_registry()
     settings = Settings()
     storage = GameStorage()
-    selected_game_mode = settings.game_mode
     config_return_route = "/intro"
     draft_card_back_name = settings.card_back_name
     draft_theme_name = settings.theme_name
@@ -81,7 +79,6 @@ def main(page: ft.Page):
 
     score_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
     timer_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
-    passes_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
     status_text = ft.Text(size=14, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
     intro_status = ft.Text(size=13)
     theme_studio_status = ft.Text(size=13)
@@ -411,7 +408,6 @@ def main(page: ft.Page):
 
     def compact_info(label, value, icon, on_click=None, hint=None):
         theme = effective_theme()
-        board_state = effective_board_state()
         return ft.Container(
             on_click=on_click,
             padding=14,
@@ -454,12 +450,18 @@ def main(page: ft.Page):
             ),
         )
 
-    def action_chip(label, icon, on_click, tone="soft"):
+    def action_chip(label, icon, on_click, tone="soft", large=False):
         theme = effective_theme()
         filled = tone == "filled"
+        horizontal_padding = 24 if large else 16
+        vertical_padding = 16 if large else 12
+        icon_size = 20 if large else 18
+        text_size = 16 if large else 14
+        chip_width = 280 if large and not is_narrow() else None
         return ft.Container(
             on_click=on_click,
-            padding=ft.Padding.symmetric(horizontal=16, vertical=12),
+            width=chip_width,
+            padding=ft.Padding.symmetric(horizontal=horizontal_padding, vertical=vertical_padding),
             border_radius=ft.BorderRadius.all(999),
             bgcolor=theme["accent"] if filled else theme["panel_bg_alt"],
             border=ft.Border.all(
@@ -470,18 +472,19 @@ def main(page: ft.Page):
                 controls=[
                     ft.Icon(
                         icon,
-                        size=18,
+                        size=icon_size,
                         color=theme["page_bg"] if filled else theme["accent"],
                     ),
                     ft.Text(
                         label,
-                        size=14,
+                        size=text_size,
                         weight=ft.FontWeight.W_600,
                         color=theme["page_bg"] if filled else theme["text"],
                     ),
                 ],
                 spacing=8,
                 tight=True,
+                alignment=ft.MainAxisAlignment.CENTER,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             ),
         )
@@ -912,9 +915,6 @@ def main(page: ft.Page):
 
     # ── Board background helpers (per-theme) ─────────────────────────────────
 
-    def effective_board_bg():
-        return effective_board_state(use_draft=False)["image"]
-
     # Studio board bg (picked while creating a new theme)
     async def _pick_studio_board_bg_async():
         nonlocal studio_board_bg_bytes, studio_board_bg_name
@@ -995,13 +995,11 @@ def main(page: ft.Page):
     def refresh_hud(autosave=False):
         score_text.value = f"Score: {board.score}"
         timer_text.value = f"Tempo: {board.format_elapsed()}"
-        passes_text.value = f"Passes: {board.format_passes()}"
         status_text.value = board.status_message
         intro_status.value = board.status_message
         try:
             score_text.update()
             timer_text.update()
-            passes_text.update()
             status_text.update()
             intro_status.update()
         except Exception:
@@ -1037,13 +1035,60 @@ def main(page: ft.Page):
         if update and board.can_update():
             board.update()
 
-    async def autosave_current_state():
-        snapshot = board.capture_state(include_initial=True)
+    def sync_draft_visuals_from_settings():
+        nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
+        draft_card_back_name = settings.card_back_name
+        draft_theme_name = settings.theme_name
+        draft_board_bg_style = settings.board_bg_style
+        draft_board_bg_target = settings.board_bg_target
+
+    def sync_settings_from_board():
+        nonlocal settings
+        settings = board.settings
+        sync_draft_visuals_from_settings()
+
+    async def load_preferences_json(key):
         try:
             preferences = ft.SharedPreferences()
-            await preferences.set(LOCAL_GAME_STATE_KEY, json.dumps(snapshot))
+            raw_value = await preferences.get(key)
         except Exception:
-            pass
+            return None
+        if not raw_value:
+            return None
+        try:
+            return json.loads(raw_value)
+        except json.JSONDecodeError:
+            return None
+
+    async def save_preferences_json(key, payload):
+        try:
+            preferences = ft.SharedPreferences()
+            await preferences.set(key, json.dumps(payload))
+            return None
+        except Exception as exc:
+            return str(exc)
+
+    def load_storage_payload(loader):
+        try:
+            return loader()
+        except Exception:
+            return None
+
+    async def load_saved_snapshot():
+        snapshot = load_storage_payload(storage.load_game)
+        if snapshot is not None:
+            return snapshot
+        return await load_preferences_json(LOCAL_GAME_STATE_KEY)
+
+    async def load_saved_visual_settings():
+        visual_payload = load_storage_payload(storage.load_visual_settings)
+        if visual_payload is not None:
+            return visual_payload
+        return await load_preferences_json(VISUAL_SETTINGS_KEY)
+
+    async def autosave_current_state():
+        snapshot = board.capture_state(include_initial=True)
+        await save_preferences_json(LOCAL_GAME_STATE_KEY, snapshot)
         try:
             storage.save_game(snapshot)
         except Exception:
@@ -1059,11 +1104,7 @@ def main(page: ft.Page):
 
     async def save_visual_settings_async():
         data = build_visual_settings_payload()
-        try:
-            preferences = ft.SharedPreferences()
-            await preferences.set(VISUAL_SETTINGS_KEY, json.dumps(data))
-        except Exception:
-            pass
+        await save_preferences_json(VISUAL_SETTINGS_KEY, data)
         try:
             storage.save_visual_settings(data)
         except Exception:
@@ -1083,27 +1124,18 @@ def main(page: ft.Page):
         navigate("/game")
 
     def open_config_from_intro(e=None):
-        nonlocal config_return_route, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target, config_theme_tab
+        nonlocal config_return_route, config_theme_tab
         config_return_route = "/intro"
-        draft_card_back_name = settings.card_back_name
-        draft_theme_name = settings.theme_name
-        draft_board_bg_style = settings.board_bg_style
-        draft_board_bg_target = settings.board_bg_target
+        sync_draft_visuals_from_settings()
         config_theme_tab = "combo"
         navigate("/config")
 
     def open_config_from_game(e=None):
-        nonlocal config_return_route, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target, config_theme_tab
+        nonlocal config_return_route, config_theme_tab
         config_return_route = "/game"
-        draft_card_back_name = settings.card_back_name
-        draft_theme_name = settings.theme_name
-        draft_board_bg_style = settings.board_bg_style
-        draft_board_bg_target = settings.board_bg_target
+        sync_draft_visuals_from_settings()
         config_theme_tab = "combo"
         navigate("/config")
-
-    def open_mode_picker(e=None):
-        navigate("/mode")
 
     def open_theme_studio(e=None):
         nonlocal studio_image_bytes, studio_image_name, studio_board_bg_bytes, studio_board_bg_name
@@ -1206,12 +1238,6 @@ def main(page: ft.Page):
         navigate("/intro")
         board.set_status(f"Tema '{created['theme']['label']}' criado.")
 
-    def select_mode(e):
-        nonlocal selected_game_mode
-        if e.control.data in GAME_MODES:
-            selected_game_mode = e.control.data
-            navigate("/intro")
-
     def apply_visual_draft(refresh_route=True):
         nonlocal draft_board_bg_style, draft_board_bg_target
         settings.card_back_name = draft_card_back_name
@@ -1251,13 +1277,8 @@ def main(page: ft.Page):
 
     async def save_game():
         snapshot = board.capture_state(include_initial=True)
-        local_error = None
+        local_error = await save_preferences_json(LOCAL_GAME_STATE_KEY, snapshot)
         duck_error = None
-        try:
-            preferences = ft.SharedPreferences()
-            await preferences.set(LOCAL_GAME_STATE_KEY, json.dumps(snapshot))
-        except Exception as exc:
-            local_error = str(exc)
         try:
             storage.save_game(snapshot)
         except Exception as exc:
@@ -1273,20 +1294,7 @@ def main(page: ft.Page):
             board.set_status("Nao foi possivel guardar a partida.")
 
     async def load_game():
-        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
-        snapshot = None
-        try:
-            snapshot = storage.load_game()
-        except Exception:
-            snapshot = None
-        if snapshot is None:
-            try:
-                preferences = ft.SharedPreferences()
-                raw_state = await preferences.get(LOCAL_GAME_STATE_KEY)
-                if raw_state:
-                    snapshot = json.loads(raw_state)
-            except Exception:
-                snapshot = None
+        snapshot = await load_saved_snapshot()
         if snapshot is None:
             board.set_status("Nao existe uma partida guardada.")
             if page.route == "/intro":
@@ -1294,79 +1302,26 @@ def main(page: ft.Page):
             return False
 
         board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
-        settings = board.settings
-        selected_game_mode = settings.game_mode
-        draft_card_back_name = settings.card_back_name
-        draft_theme_name = settings.theme_name
-        draft_board_bg_style = settings.board_bg_style
-        draft_board_bg_target = settings.board_bg_target
+        sync_settings_from_board()
         sync_board_visuals(update=False)
         render_route(page.route or "/intro")
         board.set_status("Partida carregada.")
         return True
 
-    async def load_game_from_intro():
-        loaded = await load_game()
-        if loaded:
-            show_game()
-
     async def auto_load_on_start():
-        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
-        snapshot = None
-        visual = None
-        try:
-            visual = storage.load_visual_settings()
-        except Exception:
-            pass
-        if visual is None:
-            try:
-                preferences = ft.SharedPreferences()
-                raw_visual = await preferences.get(VISUAL_SETTINGS_KEY)
-                if raw_visual:
-                    visual = json.loads(raw_visual)
-            except Exception:
-                pass
+        visual = await load_saved_visual_settings()
         if visual is not None:
             restore_visual_settings_payload(visual)
-        try:
-            snapshot = storage.load_game()
-        except Exception:
-            pass
-        if snapshot is None:
-            try:
-                preferences = ft.SharedPreferences()
-                raw_state = await preferences.get(LOCAL_GAME_STATE_KEY)
-                if raw_state:
-                    snapshot = json.loads(raw_state)
-            except Exception:
-                pass
+        snapshot = await load_saved_snapshot()
         if snapshot is not None:
             board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
-            settings = board.settings
-            selected_game_mode = settings.game_mode
-            draft_card_back_name = settings.card_back_name
-            draft_theme_name = settings.theme_name
-            draft_board_bg_style = settings.board_bg_style
-            draft_board_bg_target = settings.board_bg_target
+            sync_settings_from_board()
             sync_board_visuals(update=False)
             board.set_status("Partida anterior carregada.")
             render_route(page.route or "/intro")
             return
 
         # No game saved — try to restore the last visual settings
-        visual = None
-        try:
-            visual = storage.load_visual_settings()
-        except Exception:
-            pass
-        if visual is None:
-            try:
-                preferences = ft.SharedPreferences()
-                raw_visual = await preferences.get(VISUAL_SETTINGS_KEY)
-                if raw_visual:
-                    visual = json.loads(raw_visual)
-            except Exception:
-                pass
         if visual is None:
             return
         restore_visual_settings_payload(visual)
@@ -1374,10 +1329,6 @@ def main(page: ft.Page):
         render_route(page.route or "/intro")
 
     def start_new_game_from_intro(e):
-        nonlocal settings
-        settings.game_mode = (
-            selected_game_mode if selected_game_mode in GAME_MODES else "classic"
-        )
         board.settings = settings
         board.start_new_game()
         show_game()
@@ -1433,7 +1384,7 @@ def main(page: ft.Page):
         intro_status.color = theme["text"]
         theme_studio_status.color = theme["text"]
 
-        for text in (score_text, timer_text, passes_text):
+        for text in (score_text, timer_text):
             text.color = theme["text"]
 
         if page.appbar is not None:
@@ -1474,38 +1425,19 @@ def main(page: ft.Page):
                         ),
                     ),
                     ft.Text(
-                        "Paciência Online Extreme",
+                        "Paciência Online xTREME",
                         size=34 if is_narrow() else 40,
                         weight=ft.FontWeight.BOLD,
                         color=theme["text"],
                     ),
                     ft.Text(
-                        "Escolhe o modo da próxima partida, ajusta o visual e entra logo na mesa.",
+'''Ajusta o visual do ecrã,
+Retoma a partida atual,
+Ou começa um jogo novo!''',
                         size=14,
                         color=theme["muted"],
                     ),
                     small_banner(intro_status, ft.Icons.INFO_OUTLINE),
-                    ft.Row(
-                        controls=[
-                            compact_info(
-                                "Modo",
-                                GAME_MODES[selected_game_mode]["label"],
-                                ft.Icons.SPORTS_ESPORTS,
-                                on_click=open_mode_picker,
-                                hint="Toque para alterar",
-                            ),
-                            compact_info(
-                                "Visual",
-                                THEME_OPTIONS[settings.theme_name]["label"],
-                                ft.Icons.PALETTE,
-                                on_click=open_config_from_intro,
-                                hint="Toque para personalizar",
-                            ),
-                        ],
-                        wrap=True,
-                        spacing=12,
-                        run_spacing=12,
-                    ),
                     ft.Row(
                         controls=[
                             action_chip(
@@ -1513,21 +1445,28 @@ def main(page: ft.Page):
                                 ft.Icons.PLAY_ARROW,
                                 continue_current_game,
                                 tone="filled",
+                                large=True,
                             ),
                             action_chip(
                                 "Nova partida",
                                 ft.Icons.CASINO,
                                 start_new_game_from_intro,
-                            ),
-                            action_chip(
-                                "Criar tema",
-                                ft.Icons.BRUSH,
-                                open_theme_studio,
+                                large=True,
                             ),
                         ],
                         wrap=True,
                         spacing=12,
                         run_spacing=12,
+                    ),
+                    ft.Container(
+                        width=panel_width(),
+                        content=compact_info(
+                            "Visual e temas",
+                            f"{THEME_OPTIONS[settings.theme_name]['label']} + {BACK_OPTIONS[settings.card_back_name]['label']}",
+                            ft.Icons.PALETTE,
+                            on_click=open_config_from_intro,
+                            hint="Verso, paleta e fundo da mesa",
+                        ),
                     ),
                 ],
                 spacing=16,
@@ -1543,64 +1482,6 @@ def main(page: ft.Page):
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[hero],
                     spacing=16,
-                )
-            ],
-        )
-
-    def build_mode_view():
-        mode_cards = ft.Row(
-            controls=[
-                option_tile(
-                    GAME_MODES["classic"]["label"],
-                    GAME_MODES["classic"]["description"],
-                    selected_game_mode == "classic",
-                    ft.Icons.STARS,
-                    select_mode,
-                    data="classic",
-                ),
-                option_tile(
-                    GAME_MODES["vegas"]["label"],
-                    GAME_MODES["vegas"]["description"],
-                    selected_game_mode == "vegas",
-                    ft.Icons.PAID,
-                    select_mode,
-                    data="vegas",
-                ),
-            ],
-            wrap=True,
-            spacing=12,
-            run_spacing=12,
-        )
-        return ft.Column(
-            expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            controls=[
-                ft.Column(
-                    spacing=16,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[
-                        surface_card(
-                            "Modo da partida",
-                            "Escolhe como queres contar os pontos na próxima partida.",
-                            mode_cards,
-                            ft.Icons.SPORTS_ESPORTS,
-                        ),
-                        ft.Container(
-                            width=panel_width(),
-                            content=ft.Row(
-                                controls=[
-                                    action_chip(
-                                        "Voltar",
-                                        ft.Icons.ARROW_BACK,
-                                        lambda e: navigate("/intro"),
-                                    ),
-                                ],
-                                wrap=True,
-                                spacing=12,
-                                run_spacing=12,
-                            ),
-                        ),
-                    ],
                 )
             ],
         )
@@ -2218,152 +2099,6 @@ def main(page: ft.Page):
             ),
         )
 
-    def _build_config_view_legacy():
-        theme = effective_theme()
-
-        # "Restore default back" — visible when active back ≠ theme's matching back
-        def reset_back_to_default(_e):
-            nonlocal draft_card_back_name
-            draft_card_back_name = draft_theme_name
-            apply_visual_draft()
-
-        default_back_available = draft_theme_name in BACK_OPTIONS
-        back_mismatch = draft_card_back_name != draft_theme_name and default_back_available
-        default_back_label = BACK_OPTIONS[draft_theme_name]["label"] if default_back_available else ""
-
-        reset_chip = ft.Container(
-            on_click=reset_back_to_default,
-            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
-            border_radius=ft.BorderRadius.all(999),
-            bgcolor=theme["chip_bg"],
-            border=ft.Border.all(1.2, theme["slot_border"]),
-            content=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.REFRESH, size=15, color=theme["accent"]),
-                    ft.Text(
-                        f"Restaurar verso padrão ({default_back_label})",
-                        size=12,
-                        color=theme["text"],
-                    ),
-                ],
-                spacing=6,
-                tight=True,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        ) if back_mismatch else None
-
-        back_tiles = ft.Column(
-            controls=(
-                [reset_chip] if reset_chip else []
-            ) + [
-                build_card_back_tile(name, data)
-                for name, data in BACK_OPTIONS.items()
-            ],
-            spacing=10,
-            tight=True,
-        )
-
-        theme_tiles = ft.Column(
-            controls=[
-                build_theme_tile(name, data)
-                for name, data in THEME_OPTIONS.items()
-            ],
-            spacing=10,
-            tight=True,
-        )
-
-        preset_tiles = ft.Column(
-            controls=[build_preset_tile(p) for p in available_visual_presets()],
-            spacing=10,
-            tight=True,
-        )
-
-        actions = ft.Row(
-            controls=[
-                action_chip(
-                    "Voltar",
-                    ft.Icons.ARROW_BACK,
-                    lambda e: navigate(config_return_route),
-                ),
-                action_chip(
-                    "Gerir temas",
-                    ft.Icons.TUNE,
-                    lambda e: navigate("/manage-themes"),
-                ),
-                action_chip(
-                    "Concluir",
-                    ft.Icons.CHECK,
-                    apply_config,
-                    tone="filled",
-                ),
-            ],
-            wrap=True,
-            spacing=12,
-            run_spacing=12,
-        )
-
-        preview_label = (
-            f"{BACK_OPTIONS[draft_card_back_name]['label']} + "
-            f"{THEME_OPTIONS[draft_theme_name]['label']}"
-        )
-        preview_bar = ft.Container(
-            width=panel_width(),
-            padding=14,
-            border_radius=ft.BorderRadius.all(20),
-            bgcolor=theme["panel_bg_alt"],
-            border=ft.Border.all(1.2, theme["slot_border"]),
-            content=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.TUNE, size=16, color=theme["accent"]),
-                    ft.Text(
-                        f"A pré-visualizar: {preview_label}",
-                        size=13,
-                        color=theme["text"],
-                    ),
-                ],
-                spacing=8,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        )
-
-        return ft.Column(
-            expand=True,
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            controls=[
-                ft.Column(
-                    spacing=16,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[
-                        preview_bar,
-                        surface_card(
-                            "Combinações prontas",
-                            "Aplica carta e mesa de uma vez.",
-                            preset_tiles,
-                            ft.Icons.AUTO_AWESOME,
-                        ),
-                        surface_card(
-                            "Costas das cartas",
-                            "Escolhe o padrão que aparece no baralho.",
-                            back_tiles,
-                            ft.Icons.STYLE,
-                        ),
-                        surface_card(
-                            "Tema da mesa",
-                            "Muda a paleta de cores sem alterar o jogo.",
-                            theme_tiles,
-                            ft.Icons.PALETTE,
-                        ),
-                        surface_card(
-                            "Guardar escolha",
-                            "Confirma as alterações.",
-                            actions,
-                            ft.Icons.CHECK_CIRCLE_OUTLINE,
-                        ),
-                    ],
-                )
-            ],
-        )
-
     def build_config_view():
         theme = effective_theme()
         board_state = effective_board_state(use_draft=True)
@@ -2671,26 +2406,6 @@ def main(page: ft.Page):
             f"{THEME_OPTIONS[draft_theme_name]['label']} + "
             f"{board_state['label']}"
         )
-        preview_bar = ft.Container(
-            width=panel_width(),
-            padding=14,
-            border_radius=ft.BorderRadius.all(20),
-            bgcolor=theme["panel_bg_alt"],
-            border=ft.Border.all(1.2, theme["slot_border"]),
-            content=ft.Row(
-                controls=[
-                    ft.Icon(ft.Icons.TUNE, size=16, color=theme["accent"]),
-                    ft.Text(
-                        f"A pre-visualizar: {preview_label}",
-                        size=13,
-                        color=theme["text"],
-                    ),
-                ],
-                spacing=8,
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            ),
-        )
-
         return ft.Column(
             expand=True,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -2699,10 +2414,9 @@ def main(page: ft.Page):
                     spacing=16,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
-                        preview_bar,
                         surface_card(
                             "Temas pre feitos",
-                            "Usa a tab para mudar tudo de uma vez ou apenas a paleta.",
+                            "Muda tudo ou só a paleta",
                             theme_block,
                             ft.Icons.AUTO_AWESOME,
                         ),
@@ -2714,7 +2428,7 @@ def main(page: ft.Page):
                         ),
                         surface_card(
                             "Fundo do board",
-                            "Escolhe a cor do board ou uma imagem de fundo independente.",
+                            "Cor do board ou uma imagem de fundo.",
                             board_content,
                             ft.Icons.WALLPAPER,
                         ),
@@ -2769,6 +2483,7 @@ def main(page: ft.Page):
                         game_action_button(ft.Icons.CASINO, "Novo jogo", new_game),
                         game_action_button(ft.Icons.RESTART_ALT, "Reiniciar", restart),
                         game_action_button(ft.Icons.UNDO, "Desfazer", undo),
+                        game_action_button(ft.Icons.SAVE, "Guardar", save_clicked),
                         game_action_button(ft.Icons.DOWNLOAD, "Carregar", load_clicked),
                     ],
                 ),
@@ -2797,7 +2512,7 @@ def main(page: ft.Page):
 
     def render_route(route: str):
         page.controls.clear()
-        page.scroll = ft.ScrollMode.HIDDEN if route == "/game" else ft.ScrollMode.AUTO
+        page.scroll = None if route == "/game" else ft.ScrollMode.AUTO
 
         if route == "/manage-themes":
             page.appbar = ft.AppBar(
@@ -2826,15 +2541,6 @@ def main(page: ft.Page):
                 title=ft.Text("Criar tema"),
             )
             page.add(safe_page(build_theme_studio_view()))
-        elif route == "/mode":
-            page.appbar = ft.AppBar(
-                leading=ft.IconButton(
-                    icon=ft.Icons.ARROW_BACK,
-                    on_click=lambda e: navigate("/intro"),
-                ),
-                title=ft.Text("Modo da partida"),
-            )
-            page.add(safe_page(build_mode_view()))
         elif route == "/game":
             page.appbar = None
             page.add(build_game_view())

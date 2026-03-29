@@ -112,16 +112,11 @@ class Card(ft.GestureDetector):
                         and len(cards_to_drag) == 1
                         and self.solitaire.check_foundation_rules(self, slot.get_top_card())
                     ):
-                        self.solitaire.before_action()
+                        self.solitaire.save_undo_state()
                         old_slot = self.slot
                         for card in cards_to_drag:
                             card.place(slot)
-                        if len(old_slot.pile) > 0 and old_slot.type == "tableau":
-                            old_slot.get_top_card().turn_face_up()
-                            self.solitaire.after_tableau_reveal()
-                        elif old_slot.type == "waste":
-                            self.solitaire.display_waste()
-                        self.solitaire.after_move(old_slot, slot)
+                        self.solitaire.finish_move(old_slot, slot)
                         self._dragging_cards = []
                         return
 
@@ -132,18 +127,13 @@ class Card(ft.GestureDetector):
     def doubleclick(self, e):
         if self.slot is not None and self.slot.type in ("waste", "tableau"):
             if self.face_up:
-                self.solitaire.before_action()
+                self.solitaire.save_undo_state()
                 self.solitaire.move_on_top([self])
                 old_slot = self.slot
                 for slot in self.solitaire.foundation:
                     if self.solitaire.check_foundation_rules(self, slot.get_top_card()):
                         self.place(slot)
-                        if len(old_slot.pile) > 0 and old_slot.type == "tableau":
-                            old_slot.get_top_card().turn_face_up()
-                            self.solitaire.after_tableau_reveal()
-                        elif old_slot.type == "waste":
-                            self.solitaire.display_waste()
-                        self.solitaire.after_move(old_slot, slot)
+                        self.solitaire.finish_move(old_slot, slot)
                         return
                 self.solitaire.history.pop() if self.solitaire.history else None
 
@@ -154,9 +144,9 @@ class Card(ft.GestureDetector):
             self.solitaire.draw_from_stock()
         if self.slot.type == "tableau":
             if self.face_up is False and len(self.slot.pile) - 1 == self.slot.pile.index(self):
-                self.solitaire.before_action()
+                self.solitaire.save_undo_state()
                 self.turn_face_up()
-                self.solitaire.after_tableau_reveal()
+                self.solitaire.handle_tableau_reveal()
 
     def place(self, slot):
         self.top = slot.top

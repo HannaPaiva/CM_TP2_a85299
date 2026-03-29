@@ -1,6 +1,6 @@
 # Solitaire Atelier
 
-Aplicacao desenvolvida em Python com Flet para o TP2 de Computacao Movel. O projeto parte de uma base de Klondike Solitaire e acrescenta as funcionalidades pedidas nos objetivos 2 e 3 do enunciado: controlo de partida, persistencia, pontuacao, personalizacao visual, niveis de dificuldade e estrutura para modos de jogo distintos. A interface foi reorganizada para seguir a ideia do Solitaire & Casual Games do Windows, com um tabuleiro central, painel de informacao sempre visivel e um menu hamburger no canto superior esquerdo que concentra todas as opcoes principais.
+Aplicacao desenvolvida em Python com Flet para o TP2 de Computacao Movel. O projeto parte de uma base de Klondike Solitaire e acrescenta as funcionalidades pedidas nos objetivos 2 e 3 do enunciado: controlo de partida, persistencia, pontuacao, personalizacao visual e niveis de dificuldade. A interface foi reorganizada para seguir a ideia do Solitaire & Casual Games do Windows, com um tabuleiro central, painel de informacao sempre visivel e um menu hamburger no canto superior esquerdo que concentra todas as opcoes principais.
 
 ## Funcionalidade 1: controlo de partida e recuperacao de jogadas
 
@@ -10,15 +10,15 @@ O reinicio da partida nao cria um novo baralho aleatorio; em vez disso, repoe a 
 
 ## Funcionalidade 2: persistencia com DuckDB e local storage
 
-A persistencia da partida foi pensada como uma funcionalidade central do objetivo 2, e nao como um simples extra acessorio. O enunciado pede explicitamente que o estado do jogo possa ser guardado e carregado a partir de DuckDB e local storage, por isso a implementacao foi desenhada para usar ambos os mecanismos em paralelo. Sempre que o utilizador escolhe guardar a partida, o tabuleiro atual e serializado para um snapshot completo com cartas no stock, waste, tableau e fundacoes, cartas viradas para cima ou para baixo, seed da partida, pontuacao, tempo decorrido, dificuldade, modo de jogo, back selecionado e tema visual. Esse snapshot e escrito para uma base `DuckDB` local e tambem para o armazenamento persistente do cliente via `SharedPreferences` do Flet. No carregamento, a aplicacao tenta recuperar primeiro a versao em DuckDB e, caso nao exista, utiliza o estado em local storage.
+A persistencia da partida foi pensada como uma funcionalidade central do objetivo 2, e nao como um simples extra acessorio. O enunciado pede explicitamente que o estado do jogo possa ser guardado e carregado a partir de DuckDB e local storage, por isso a implementacao foi desenhada para usar ambos os mecanismos em paralelo. Sempre que o utilizador escolhe guardar a partida, o tabuleiro atual e serializado para um snapshot completo com cartas no stock, waste, tableau e fundacoes, cartas viradas para cima ou para baixo, seed da partida, pontuacao, tempo decorrido, dificuldade, back selecionado e tema visual. Esse snapshot e escrito para uma base `DuckDB` local e tambem para o armazenamento persistente do cliente via `SharedPreferences` do Flet. No carregamento, a aplicacao tenta recuperar primeiro a versao em DuckDB e, caso nao exista, utiliza o estado em local storage.
 
 O motivo para incluir os dois mecanismos foi garantir redundancia e demonstrar um fluxo de persistencia mais completo. O `DuckDB` cumpre a exigencia tecnologica do enunciado e oferece um armazenamento estruturado no disco, enquanto o local storage ajuda a manter uma copia leve e imediata das preferencias e do ultimo estado salvo. A vantagem pratica para o utilizador e evidente: uma partida pode ser interrompida e retomada sem perder progresso, mesmo depois de fechar a aplicacao. Esta funcionalidade tambem reforca a percecao de produto acabado, porque o jogo deixa de ser efemero e passa a acompanhar o utilizador entre sessoes. Para efeitos de demonstracao, o menu inclui botoes diretos de guardar e carregar, com mensagens de estado que explicam de onde foi recuperada a partida e se algum dos mecanismos ficou indisponivel.
 
-## Funcionalidade 3: pontuacao, cronometro e modos de jogo
+## Funcionalidade 3: pontuacao e cronometro
 
 O sistema de pontuacao com cronometro visivel durante toda a partida foi incluido para aproximar a app do comportamento esperado num Solitaire moderno e para dar mais contexto ao progresso do jogador. O cronometro corre continuamente enquanto a partida esta ativa e para de evoluir quando o jogador vence. A pontuacao muda de acordo com o tipo de movimento, privilegiando jogadas uteis como mover cartas para a fundacao, tirar cartas da waste para o tableau e revelar novas cartas no tableau. Isto cria um feedback constante e torna a partida mais legivel, porque cada acao deixa de ser apenas visual e passa a ter peso numerico. Alem disso, o cronometro e a pontuacao ajudam a comparar desempenhos entre partidas, sobretudo quando se experimentam dificuldades diferentes.
 
-Esta base de scoring foi tambem usada para suportar modos de jogo diferentes. Para responder ao objetivo 3, nao bastava acrescentar um seletor cosmetico; era importante deixar a arquitetura preparada para regras distintas. O projeto passa agora a suportar pelo menos dois modos: `Classico` e `Vegas`. No modo classico, a pontuacao segue uma logica inspirada no Solitaire do Windows. No modo Vegas, a partida arranca com penalizacao inicial e as fundacoes passam a ter um peso monetizado, o que altera a forma como o jogador interpreta risco e progresso. Mesmo que o trabalho se concentre em Klondike, a separacao entre `difficulty` e `game_mode` deixa o codigo preparado para acrescentar mais variantes no futuro sem reescrever o tabuleiro. Esta funcionalidade foi escolhida porque acrescenta profundidade real ao jogo, demonstra extensibilidade e responde de forma direta ao pedido de “deixar espaco para diferentes modos de jogo”.
+Para manter o fluxo da aplicacao mais claro, a pontuacao ficou concentrada num unico conjunto de regras inspirado no Solitaire do Windows. Assim, o jogador recebe pontos por jogadas uteis como mover cartas para a fundacao, tirar cartas da waste para o tableau e revelar novas cartas no tableau, sem ter de escolher variantes de scoring antes de entrar na partida. Esta decisao torna o comportamento da aplicacao mais previsivel, reduz complexidade desnecessaria na interface e deixa a logica central do tabuleiro mais facil de seguir e manter.
 
 ## Funcionalidade 4: personalizacao visual com backs e temas independentes
 
@@ -37,7 +37,6 @@ Esta separacao tem uma justificacao clara em termos de experiencia de utilizacao
    - desfazer a ultima jogada;
    - guardar e carregar o estado do jogo;
    - trocar a dificuldade;
-   - alternar entre modo Classico e Vegas;
    - escolher um back de cartas;
    - escolher um tema de tabuleiro independentemente do back.
 

@@ -129,24 +129,10 @@ DIFFICULTY_PRESETS = {
     },
 }
 
-GAME_MODES = {
-    "classic": {
-        "label": "Classico",
-        "description": "Pontuacao tradicional inspirada no Solitaire do Windows.",
-        "starting_score": 0,
-    },
-    "vegas": {
-        "label": "Vegas",
-        "description": "Cada fundacao vale dinheiro e a partida comeca em -52.",
-        "starting_score": -52,
-    },
-}
-
 
 @dataclass
 class Settings:
     difficulty: str = "easy"
-    game_mode: str = "classic"
     card_back_name: str = "classic"
     theme_name: str = "classic"
     board_bg_style: str = "theme_color"
@@ -175,14 +161,9 @@ class Settings:
     def difficulty_label(self):
         return DIFFICULTY_PRESETS[self.difficulty]["label"]
 
-    @property
-    def mode_label(self):
-        return GAME_MODES[self.game_mode]["label"]
-
     def to_dict(self):
         return {
             "difficulty": self.difficulty,
-            "game_mode": self.game_mode,
             "card_back_name": self.card_back_name,
             "theme_name": self.theme_name,
             "board_bg_style": self.board_bg_style,
@@ -195,7 +176,6 @@ class Settings:
     def from_dict(cls, data):
         settings = cls(
             difficulty=str(data.get("difficulty", "classic")),
-            game_mode=str(data.get("game_mode", "classic")),
             card_back_name=str(
                 data.get("card_back_name", data.get("card_back", "classic"))
             ),
@@ -208,8 +188,6 @@ class Settings:
             settings.card_back_name = "classic"
         if settings.theme_name not in THEME_OPTIONS:
             settings.theme_name = "classic"
-        if settings.game_mode not in GAME_MODES:
-            settings.game_mode = "classic"
         if settings.board_bg_style not in {"theme_color", "preset_color", "image"}:
             settings.board_bg_style = "theme_color"
             settings.board_bg_target = ""

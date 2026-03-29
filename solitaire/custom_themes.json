@@ -3,17 +3,17 @@
     "tema_de_teste_xtreme": {
       "label": "Tema De Teste Xtreme",
       "page_bg": "#160718",
-      "header_bg": "#4E0D25",
-      "panel_bg": "#5E102D",
-      "panel_bg_alt": "#722441",
+      "header_bg": "#410B1F",
+      "panel_bg": "#4F0E26",
+      "panel_bg_alt": "#64223A",
       "board_bg": "#661E6B",
       "board_bg_alt": "#541958",
-      "chip_bg": "#661649",
+      "chip_bg": "#5D1545",
       "slot_bg": "#78397D",
-      "slot_border": "#F4D788",
+      "slot_border": "#E6C667",
       "text": "#F7F7F2",
       "muted": "#CEBACC",
-      "accent": "#F1CE6E",
+      "accent": "#E1BA46",
       "custom": true
     },
     "classic_green_remix": {
@@ -40,7 +40,7 @@
       "suggested_theme": "tema_de_teste_xtreme",
       "fit": "cover",
       "scale": 1.05,
-      "board_bg": null,
+      "board_bg": "boards/tema_de_teste_xtreme_board.jpg",
       "custom": true
     },
     "classic_green_remix": {

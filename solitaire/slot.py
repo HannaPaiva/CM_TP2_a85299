@@ -44,6 +44,6 @@ class Slot(ft.Container):
 
     def click(self, e):
         if self.type == "stock" and self.solitaire.deck_passes_remaining > 1:
-            self.solitaire.before_action()
+            self.solitaire.save_undo_state()
             self.solitaire.deck_passes_remaining -= 1
-            self.solitaire.restart_stock()
+            self.solitaire.recycle_waste_to_stock()
