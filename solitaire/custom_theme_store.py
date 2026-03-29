@@ -163,6 +163,24 @@ def load_custom_theme_bundle():
     return {"themes": themes, "backs": backs}
 
 
+def load_custom_board_background_assets():
+    raw_payload = _load_raw_bundle()
+    options = []
+    raw_asset = str(raw_payload.get("board_bg_image", "") or "").replace("\\", "/").lstrip("/")
+    if raw_asset:
+        asset_path = PROJECT_ROOT / "assets" / raw_asset
+        if asset_path.exists():
+            options.append(
+                {
+                    "id": raw_asset,
+                    "label": "Board personalizado",
+                    "asset": raw_asset,
+                    "custom": True,
+                }
+            )
+    return options
+
+
 def _save_custom_theme_bundle(bundle):
     """Save themes/backs while preserving all other top-level keys."""
     CUSTOM_THEMES_FILE.parent.mkdir(parents=True, exist_ok=True)

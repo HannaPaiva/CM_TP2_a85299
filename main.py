@@ -8,6 +8,7 @@ import flet as ft
 from solitaire.custom_theme_store import (
     build_theme_palette,
     delete_custom_theme,
+    load_custom_board_background_assets,
     rename_custom_theme,
     save_custom_theme_bundle,
     update_custom_theme_board_bg,
@@ -204,6 +205,11 @@ def main(page: ft.Page):
         if style == "image":
             if target in BACK_OPTIONS and BACK_OPTIONS[target].get("board_bg"):
                 return style, target
+            asset_target = target.replace("\\", "/").lstrip("/")
+            if asset_target:
+                asset_path = Path(__file__).resolve().parent / "assets" / asset_target
+                if asset_path.exists():
+                    return style, asset_target
             return "theme_color", ""
         if style == "preset_color":
             if target in THEME_OPTIONS:
@@ -233,6 +239,22 @@ def main(page: ft.Page):
                     "image": image_path,
                     "label": back_data.get("label", board_target),
                     "description": "Imagem de fundo do board",
+                }
+            asset_target = board_target.replace("\\", "/").lstrip("/")
+            asset_path = Path(__file__).resolve().parent / "assets" / asset_target
+            if asset_target and asset_path.exists():
+                label = "Board personalizado"
+                for option in load_custom_board_background_assets():
+                    if option["id"] == asset_target:
+                        label = option["label"]
+                        break
+                return {
+                    "style": board_style,
+                    "target": asset_target,
+                    "color": theme_data["board_bg"],
+                    "image": asset_target,
+                    "label": label,
+                    "description": "Imagem independente do board",
                 }
 
         if board_style == "preset_color":
@@ -308,11 +330,28 @@ def main(page: ft.Page):
         ]
 
     def available_board_image_backs():
-        return [
-            name
+        options = [
+            {
+                "id": name,
+                "label": data.get("label", name),
+                "asset": data.get("board_bg"),
+                "source": "back",
+            }
             for name, data in BACK_OPTIONS.items()
             if data.get("board_bg")
         ]
+        options.extend(
+            [
+                {
+                    "id": data["id"],
+                    "label": data["label"],
+                    "asset": data["asset"],
+                    "source": "asset",
+                }
+                for data in load_custom_board_background_assets()
+            ]
+        )
+        return options
 
     def build_visual_settings_payload():
         board_state = effective_board_state(use_draft=False)
@@ -2179,7 +2218,7 @@ def main(page: ft.Page):
             ),
         )
 
-    def build_config_view():
+    def _build_config_view_legacy():
         theme = effective_theme()
 
         # "Restore default back" — visible when active back ≠ theme's matching back
@@ -2325,7 +2364,7 @@ def main(page: ft.Page):
             ],
         )
 
-    def _build_config_view_legacy():
+    def build_config_view():
         theme = effective_theme()
         board_state = effective_board_state(use_draft=True)
 
@@ -2404,11 +2443,10 @@ def main(page: ft.Page):
                 media=swatch,
             )
 
-        def build_board_image_tile(back_name):
-            back_data = BACK_OPTIONS[back_name]
+        def build_board_image_tile(option):
             selected = (
                 board_state["style"] == "image"
-                and board_state["target"] == back_name
+                and board_state["target"] == option["id"]
             )
             preview = ft.Container(
                 height=92,
@@ -2417,17 +2455,17 @@ def main(page: ft.Page):
                 clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
                 bgcolor=theme["panel_bg_alt"],
                 image=ft.DecorationImage(
-                    src=back_data["board_bg"],
+                    src=option["asset"],
                     fit=ft.BoxFit.COVER,
                     opacity=0.9,
                 ),
             )
             return option_tile(
-                title=back_data["label"],
+                title=option["label"],
                 subtitle="Usa apenas a imagem do board",
                 selected=selected,
                 icon=ft.Icons.WALLPAPER,
-                on_click=lambda e, bn=back_name: select_board_image(bn),
+                on_click=lambda e, oid=option["id"]: select_board_image(oid),
                 media=preview,
             )
 
@@ -2575,7 +2613,7 @@ def main(page: ft.Page):
         board_image_names = available_board_image_backs()
         board_images_content = (
             ft.Column(
-                controls=[build_board_image_tile(name) for name in board_image_names],
+                controls=[build_board_image_tile(option) for option in board_image_names],
                 spacing=10,
                 tight=True,
             )
