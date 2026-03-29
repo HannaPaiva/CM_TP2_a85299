@@ -555,13 +555,14 @@ def main(page: ft.Page):
                         border_radius=ft.BorderRadius.all(999),
                         bgcolor="#22FFFFFF",
                         content=ft.Text(
-                            "Jogo rápido, pensado para telemóvel",
-                            size=11,
+                            "Bem-vindo ao",
+                            size=18,
+                            weight=ft.FontWeight.BOLD,
                             color=theme["text"],
                         ),
                     ),
                     ft.Text(
-                        "Paciência",
+                        "Paciência Online Extreme",
                         size=34 if is_narrow() else 40,
                         weight=ft.FontWeight.BOLD,
                         color=theme["text"],
