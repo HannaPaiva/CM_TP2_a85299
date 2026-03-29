@@ -1,30 +1,57 @@
 {
   "themes": {
-    "mariana_de_banana": {
-      "label": "Mariana De Banana",
-      "page_bg": "#07180F",
-      "header_bg": "#102619",
-      "panel_bg": "#132E1E",
-      "panel_bg_alt": "#284233",
-      "board_bg": "#1E6B42",
-      "board_bg_alt": "#195836",
-      "chip_bg": "#194A2F",
-      "slot_bg": "#397D59",
+    "tema_de_teste_xtreme": {
+      "label": "Tema De Teste Xtreme",
+      "page_bg": "#160718",
+      "header_bg": "#4E0D25",
+      "panel_bg": "#5E102D",
+      "panel_bg_alt": "#722441",
+      "board_bg": "#661E6B",
+      "board_bg_alt": "#541958",
+      "chip_bg": "#661649",
+      "slot_bg": "#78397D",
       "slot_border": "#F4D788",
       "text": "#F7F7F2",
-      "muted": "#BAD0C1",
+      "muted": "#CEBACC",
       "accent": "#F1CE6E",
+      "custom": true
+    },
+    "classic_green_remix": {
+      "label": "Zaheen LOL",
+      "page_bg": "#120718",
+      "header_bg": "#111026",
+      "panel_bg": "#14132E",
+      "panel_bg_alt": "#292842",
+      "board_bg": "#521E6B",
+      "board_bg_alt": "#431958",
+      "chip_bg": "#2F194A",
+      "slot_bg": "#67397D",
+      "slot_border": "#F488C6",
+      "text": "#F7F7F2",
+      "muted": "#C9BACC",
+      "accent": "#F16EBA",
       "custom": true
     }
   },
   "backs": {
-    "mariana_de_banana": {
-      "label": "Mariana De Banana",
-      "asset": "backs/custom/mariana_de_banana.jpg",
-      "suggested_theme": "mariana_de_banana",
+    "tema_de_teste_xtreme": {
+      "label": "Tema De Teste Xtreme",
+      "asset": "backs/custom/tema_de_teste_xtreme.jpg",
+      "suggested_theme": "tema_de_teste_xtreme",
       "fit": "cover",
-      "scale": 1.0,
+      "scale": 1.05,
+      "board_bg": null,
+      "custom": true
+    },
+    "classic_green_remix": {
+      "label": "Zaheen LOL",
+      "asset": "backs/custom/classic_green_remix.jpg",
+      "suggested_theme": "classic_green_remix",
+      "fit": "cover",
+      "scale": 1.05,
+      "board_bg": "boards/classic_green_remix_board.jpg",
       "custom": true
     }
-  }
+  },
+  "board_bg_image": "boards/board_bg.jpg"
 }

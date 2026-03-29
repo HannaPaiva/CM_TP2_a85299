@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import flet; print\\(flet.__version__\\)\")",
+      "Bash(uv run:*)"
+    ]
+  }
+}

@@ -1,10 +1,18 @@
 import asyncio
+import colorsys
 import json
 from pathlib import Path
 
 import flet as ft
 
-from solitaire.custom_theme_store import build_theme_palette, save_custom_theme_bundle
+from solitaire.custom_theme_store import (
+    build_theme_palette,
+    delete_custom_theme,
+    rename_custom_theme,
+    save_custom_theme_bundle,
+    update_custom_theme_board_bg,
+    update_custom_theme_palette,
+)
 from solitaire.gameboard_original import GameBoard
 from solitaire.settings import (
     BACK_OPTIONS,
@@ -47,6 +55,8 @@ def main(page: ft.Page):
 
     studio_image_bytes = None
     studio_image_name = None
+    studio_board_bg_bytes = None
+    studio_board_bg_name = None
 
     studio_name_field = ft.TextField(
         label="Nome do tema",
@@ -83,6 +93,40 @@ def main(page: ft.Page):
 
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
+
+    board_file_picker = ft.FilePicker()
+    page.services.append(board_file_picker)
+
+    # Color picker state
+    picker_target = None   # "base"|"surface"|"accent"|("edit", theme_name, color_key)
+    picker_hue = 0.0       # 0–360
+    picker_sat = 1.0       # 0–1
+    picker_val = 0.6       # 0–1
+
+    PICKER_W = 260
+    PICKER_H = 180
+    HUE_H = 28
+
+    def _hex_to_hsv(hex_str):
+        raw = str(hex_str or "").strip().lstrip("#")
+        if len(raw) == 3:
+            raw = "".join(c * 2 for c in raw)
+        if len(raw) != 6:
+            return 0.0, 0.8, 0.6
+        try:
+            r = int(raw[0:2], 16) / 255
+            g = int(raw[2:4], 16) / 255
+            b = int(raw[4:6], 16) / 255
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            return h * 360, s, v
+        except Exception:
+            return 0.0, 0.8, 0.6
+
+    def _hsv_to_hex(h, s, v):
+        r, g, b = colorsys.hsv_to_rgb(h / 360.0, s, v)
+        return "#{:02X}{:02X}{:02X}".format(
+            int(r * 255 + 0.5), int(g * 255 + 0.5), int(b * 255 + 0.5)
+        )
 
     # --- layout helpers ---
 
@@ -382,14 +426,351 @@ def main(page: ft.Page):
             content=ft.Column(controls=controls, spacing=14, tight=True),
         )
 
-    def on_win():
-        dialog = ft.AlertDialog(
-            title=ft.Text("Vitoria!"),
-            content=ft.Text("Completaste as quatro fundacoes."),
+    # ── Color picker (Flet 0.82 compatible) ──────────────────────────────────
+
+    # Persistent controls — created lazily on first use
+    _pc: dict = {}  # sv_bg, cursor, hue_thumb, result_swatch, hex_text
+    _picker_dialog_ref: list = [None]  # [dialog] or [None]
+
+    def _update_picker_visuals():
+        if not _pc:
+            return
+        h, s, v = picker_hue, picker_sat, picker_val
+        hue_hex = _hsv_to_hex(h, 1.0, 1.0)
+        result_hex = _hsv_to_hex(h, s, v)
+
+        _pc["sv_bg"].bgcolor = hue_hex
+        _pc["cursor"].left = max(0, s * PICKER_W - 10)
+        _pc["cursor"].top = max(0, (1 - v) * PICKER_H - 10)
+        _pc["hue_thumb"].left = max(0, (h / 360.0) * PICKER_W - 11)
+        _pc["result_swatch"].bgcolor = result_hex
+        _pc["hex_text"].value = result_hex
+        try:
+            page.update()
+        except Exception:
+            pass
+
+    def _on_sv_event(e):
+        nonlocal picker_sat, picker_val
+        lp = getattr(e, "local_position", None)
+        x = max(0.0, min(float(PICKER_W), float(lp.x if lp else 0)))
+        y = max(0.0, min(float(PICKER_H), float(lp.y if lp else 0)))
+        picker_sat = x / PICKER_W
+        picker_val = 1.0 - y / PICKER_H
+        _update_picker_visuals()
+
+    def _on_hue_event(e):
+        nonlocal picker_hue
+        lp = getattr(e, "local_position", None)
+        x = max(0.0, min(float(PICKER_W), float(lp.x if lp else 0)))
+        picker_hue = (x / PICKER_W) * 360.0
+        _update_picker_visuals()
+
+    def _close_picker():
+        page.pop_dialog()
+
+    def _apply_picker_color(e=None):
+        nonlocal picker_target
+        hex_val = _hsv_to_hex(picker_hue, picker_sat, picker_val)
+        target = picker_target
+        _close_picker()
+        if target == "base":
+            studio_base_field.value = hex_val
+            render_route("/theme-studio")
+        elif target == "surface":
+            studio_surface_field.value = hex_val
+            render_route("/theme-studio")
+        elif target == "accent":
+            studio_accent_field.value = hex_val
+            render_route("/theme-studio")
+        elif isinstance(target, tuple) and target[0] == "edit":
+            _, theme_name, color_key = target
+            _apply_theme_color_edit(theme_name, color_key, hex_val)
+
+    def _ensure_picker_ready():
+        if _picker_dialog_ref[0] is not None:
+            return
+        sv_bg = ft.Container(width=PICKER_W, height=PICKER_H, bgcolor="#FF0000")
+        cursor = ft.Container(
+            width=20, height=20,
+            border_radius=ft.BorderRadius.all(10),
+            border=ft.Border.all(2.5, "white"),
+            shadow=ft.BoxShadow(blur_radius=6, color="#66000000"),
+            left=PICKER_W - 10, top=10,
         )
-        page.dialog = dialog
-        dialog.open = True
-        page.update()
+        hue_thumb = ft.Container(
+            width=22, height=22,
+            border_radius=ft.BorderRadius.all(11),
+            bgcolor="white",
+            border=ft.Border.all(2, "#888888"),
+            shadow=ft.BoxShadow(blur_radius=4, color="#44000000"),
+            left=0, top=-1,
+        )
+        result_swatch = ft.Container(
+            width=44, height=44,
+            border_radius=ft.BorderRadius.all(10),
+            bgcolor="#FF0000",
+            border=ft.Border.all(1.5, "#44FFFFFF"),
+        )
+        hex_text = ft.Text("#FF0000", size=15, weight=ft.FontWeight.BOLD, color="#F0F0F0")
+
+        _pc["sv_bg"] = sv_bg
+        _pc["cursor"] = cursor
+        _pc["hue_thumb"] = hue_thumb
+        _pc["result_swatch"] = result_swatch
+        _pc["hex_text"] = hex_text
+
+        sv_canvas = ft.GestureDetector(
+            on_tap=_on_sv_event,
+            on_pan_start=_on_sv_event,
+            on_pan_update=_on_sv_event,
+            content=ft.Stack(
+                width=PICKER_W, height=PICKER_H,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                controls=[
+                    sv_bg,
+                    ft.Container(
+                        width=PICKER_W, height=PICKER_H,
+                        gradient=ft.LinearGradient(
+                            begin=ft.Alignment(-1, 0), end=ft.Alignment(1, 0),
+                            colors=["#FFFFFFFF", "#00FFFFFF"],
+                        ),
+                    ),
+                    ft.Container(
+                        width=PICKER_W, height=PICKER_H,
+                        gradient=ft.LinearGradient(
+                            begin=ft.Alignment(0, -1), end=ft.Alignment(0, 1),
+                            colors=["#00000000", "#FF000000"],
+                        ),
+                    ),
+                    cursor,
+                ],
+            ),
+        )
+        hue_strip = ft.GestureDetector(
+            on_tap=_on_hue_event,
+            on_pan_start=_on_hue_event,
+            on_pan_update=_on_hue_event,
+            content=ft.Stack(
+                width=PICKER_W, height=HUE_H,
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                controls=[
+                    ft.Container(
+                        width=PICKER_W, height=HUE_H,
+                        border_radius=ft.BorderRadius.all(HUE_H // 2),
+                        gradient=ft.LinearGradient(
+                            begin=ft.Alignment(-1, 0), end=ft.Alignment(1, 0),
+                            colors=["#FF0000", "#FFFF00", "#00FF00",
+                                    "#00FFFF", "#0000FF", "#FF00FF", "#FF0000"],
+                        ),
+                    ),
+                    hue_thumb,
+                ],
+            ),
+        )
+        _picker_dialog_ref[0] = ft.AlertDialog(
+            title=ft.Text("Escolher cor", weight=ft.FontWeight.BOLD),
+            bgcolor="#1A2820",
+            content=ft.Column(
+                controls=[
+                    sv_canvas,
+                    ft.Container(height=14),
+                    hue_strip,
+                    ft.Container(height=14),
+                    ft.Row(
+                        controls=[result_swatch, hex_text],
+                        spacing=12,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ],
+                spacing=0, tight=True, width=PICKER_W,
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda e: _close_picker()),
+                ft.FilledButton("Aplicar", on_click=_apply_picker_color),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+    def _open_color_picker(target_id, current_hex):
+        nonlocal picker_target, picker_hue, picker_sat, picker_val
+        picker_target = target_id
+        picker_hue, picker_sat, picker_val = _hex_to_hsv(current_hex)
+        _ensure_picker_ready()
+        _update_picker_visuals()
+        page.show_dialog(_picker_dialog_ref[0])
+
+    def color_swatch_button(field, target_id):
+        """Tappable colour swatch — opens the visual picker for that field."""
+        cur_hex = field.value or "#000000"
+        bg = cur_hex if is_hex_color(cur_hex) else "#888888"
+        return ft.GestureDetector(
+            on_tap=lambda e, t=target_id, f=field: _open_color_picker(t, f.value),
+            content=ft.Container(
+                width=40, height=40,
+                border_radius=ft.BorderRadius.all(8),
+                bgcolor=bg,
+                border=ft.Border.all(1.5, effective_theme()["slot_border"]),
+                tooltip="Escolher cor com selector visual",
+            ),
+        )
+
+    # ── Theme management helpers ──────────────────────────────────────────────
+
+    def _apply_theme_color_edit(theme_name, color_key, new_hex):
+        current = THEME_OPTIONS.get(theme_name, {})
+        base = current.get("board_bg", "#1E6B42")
+        surface = current.get("panel_bg", "#153221")
+        accent = current.get("accent", "#F1CE6E")
+        light_text = is_light_color(current.get("text", "#F0F0F0"))
+        if color_key == "base":
+            base = new_hex
+        elif color_key == "surface":
+            surface = new_hex
+        elif color_key == "accent":
+            accent = new_hex
+        try:
+            update_custom_theme_palette(theme_name, base, surface, accent, light_text)
+            refresh_custom_theme_registry()
+            if settings.theme_name == theme_name:
+                apply_visual_draft(refresh_route=False)
+        except Exception:
+            pass
+        render_route("/manage-themes")
+
+    def _open_rename_dialog(theme_name):
+        name_field = ft.TextField(
+            value=THEME_OPTIONS[theme_name]["label"],
+            label="Nome do tema",
+            autofocus=True,
+        )
+
+        def _do_rename(e):
+            new_label = (name_field.value or "").strip()
+            if len(new_label) < 2:
+                return
+            rename_custom_theme(theme_name, new_label)
+            refresh_custom_theme_registry()
+            page.pop_dialog()
+            render_route("/manage-themes")
+
+        page.show_dialog(ft.AlertDialog(
+            title=ft.Text("Renomear tema"),
+            content=name_field,
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda e: page.pop_dialog()),
+                ft.FilledButton("Guardar", on_click=_do_rename),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        ))
+
+    def _open_delete_confirm(theme_name):
+        label = THEME_OPTIONS.get(theme_name, {}).get("label", theme_name)
+
+        def _do_delete(e):
+            nonlocal draft_card_back_name, draft_theme_name
+            delete_custom_theme(theme_name)
+            refresh_custom_theme_registry()
+            if settings.theme_name == theme_name:
+                settings.theme_name = "classic"
+                settings.card_back_name = "classic"
+                draft_card_back_name = "classic"
+                draft_theme_name = "classic"
+                sync_board_visuals(update=False)
+            page.pop_dialog()
+            render_route("/manage-themes")
+
+        page.show_dialog(ft.AlertDialog(
+            title=ft.Text("Eliminar tema"),
+            content=ft.Text(
+                f"Tens a certeza que queres eliminar '{label}'? Esta ação não pode ser desfeita."
+            ),
+            actions=[
+                ft.TextButton("Cancelar", on_click=lambda e: page.pop_dialog()),
+                ft.FilledButton(
+                    "Eliminar",
+                    on_click=_do_delete,
+                    style=ft.ButtonStyle(bgcolor=ft.Colors.RED_700),
+                ),
+            ],
+            actions_alignment=ft.MainAxisAlignment.END,
+        ))
+
+    # ── Board background helpers (per-theme) ─────────────────────────────────
+
+    def effective_board_bg():
+        """Return the board bg asset path for the active card back, or None."""
+        return BACK_OPTIONS.get(settings.card_back_name, {}).get("board_bg")
+
+    # Studio board bg (picked while creating a new theme)
+    async def _pick_studio_board_bg_async():
+        nonlocal studio_board_bg_bytes, studio_board_bg_name
+        files = await board_file_picker.pick_files(
+            dialog_title="Escolhe o fundo do tabuleiro",
+            file_type=ft.FilePickerFileType.IMAGE,
+            allow_multiple=False,
+            with_data=True,
+        )
+        if not files:
+            return
+        selected = files[0]
+        data = selected.bytes
+        if data is None and selected.path:
+            data = Path(selected.path).read_bytes()
+        if not data:
+            return
+        studio_board_bg_bytes = data
+        studio_board_bg_name = selected.name
+        theme_studio_status.value = f"Fundo '{studio_board_bg_name}' carregado."
+        render_route("/theme-studio")
+
+    def _choose_studio_board_bg(e=None):
+        page.run_task(_pick_studio_board_bg_async)
+
+    def _clear_studio_board_bg(e=None):
+        nonlocal studio_board_bg_bytes, studio_board_bg_name
+        studio_board_bg_bytes = None
+        studio_board_bg_name = None
+        render_route("/theme-studio")
+
+    # Per-theme board bg management (from manage-themes view)
+    def _choose_board_bg_for_theme(theme_name):
+        async def _pick():
+            files = await board_file_picker.pick_files(
+                dialog_title="Fundo do tabuleiro para este tema",
+                file_type=ft.FilePickerFileType.IMAGE,
+                allow_multiple=False,
+                with_data=True,
+            )
+            if not files:
+                return
+            selected = files[0]
+            data = selected.bytes
+            if data is None and selected.path:
+                data = Path(selected.path).read_bytes()
+            if not data:
+                return
+            update_custom_theme_board_bg(theme_name, data, selected.name)
+            refresh_custom_theme_registry()
+            apply_page_theme()
+            render_route("/manage-themes")
+        page.run_task(_pick)
+
+    def _clear_board_bg_for_theme(theme_name):
+        update_custom_theme_board_bg(theme_name, None, None)
+        refresh_custom_theme_registry()
+        apply_page_theme()
+        render_route("/manage-themes")
+
+    # ── End new helpers ───────────────────────────────────────────────────────
+
+    def on_win():
+        page.show_dialog(ft.AlertDialog(
+            title=ft.Text("Vitória!"),
+            content=ft.Text("Completaste as quatro fundações."),
+            actions=[ft.FilledButton("OK", on_click=lambda e: page.pop_dialog())],
+            actions_alignment=ft.MainAxisAlignment.END,
+        ))
 
     def refresh_hud(autosave=False):
         score_text.value = f"Score: {board.score}"
@@ -487,7 +868,7 @@ def main(page: ft.Page):
         navigate("/mode")
 
     def open_theme_studio(e=None):
-        nonlocal studio_image_bytes, studio_image_name
+        nonlocal studio_image_bytes, studio_image_name, studio_board_bg_bytes, studio_board_bg_name
         current_theme = settings.theme
         studio_name_field.value = f"{current_theme['label']} Remix"
         studio_base_field.value = current_theme["board_bg"]
@@ -497,6 +878,8 @@ def main(page: ft.Page):
         studio_zoom_slider.value = 1.0
         studio_image_bytes = None
         studio_image_name = None
+        studio_board_bg_bytes = None
+        studio_board_bg_name = None
         theme_studio_status.value = "Cria uma paleta, faz upload do verso e guarda o tema no projeto."
         navigate("/theme-studio")
 
@@ -567,6 +950,8 @@ def main(page: ft.Page):
                 image_bytes=studio_image_bytes,
                 original_filename=studio_image_name,
                 image_scale=studio_zoom_slider.value or 1.0,
+                board_bg_bytes=studio_board_bg_bytes,
+                board_bg_filename=studio_board_bg_name,
             )
         except ValueError as exc:
             theme_studio_status.value = str(exc)
@@ -741,6 +1126,9 @@ def main(page: ft.Page):
         page.padding = 0 if page.route == "/game" else page_padding()
         page.bgcolor = theme["page_bg"]
         board_frame.bgcolor = theme["board_bg"]
+        # Board background image — per-theme, behind the game
+        bg = effective_board_bg()
+        board_frame.image = ft.DecorationImage(src=bg, fit=ft.BoxFit.COVER, opacity=0.75) if bg else None
         board_frame.padding = ft.Padding.symmetric(
             horizontal=2 if is_narrow() else 12,
             vertical=4 if is_narrow() else 12,
@@ -1036,6 +1424,11 @@ def main(page: ft.Page):
                                     padding=16,
                                     border_radius=ft.BorderRadius.all(20),
                                     bgcolor=palette["board_bg"],
+                                    image=ft.DecorationImage(
+                                        src=studio_board_bg_bytes,
+                                        fit=ft.BoxFit.COVER,
+                                        opacity=0.75,
+                                    ) if studio_board_bg_bytes else None,
                                     content=ft.Column(
                                         controls=[
                                             ft.Text(
@@ -1058,39 +1451,67 @@ def main(page: ft.Page):
             ),
         )
 
+        def _color_row(field, target_id):
+            return ft.Row(
+                controls=[
+                    color_swatch_button(field, target_id),
+                    ft.Container(expand=True, content=field),
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+
         creation_form = ft.Column(
             controls=[
                 studio_name_field,
-                ft.ResponsiveRow(
-                    controls=[
-                        ft.Container(col={"xs": 12, "md": 4}, content=studio_base_field),
-                        ft.Container(col={"xs": 12, "md": 4}, content=studio_surface_field),
-                        ft.Container(col={"xs": 12, "md": 4}, content=studio_accent_field),
-                    ],
-                    run_spacing=12,
-                ),
+                _color_row(studio_base_field, "base"),
+                _color_row(studio_surface_field, "surface"),
+                _color_row(studio_accent_field, "accent"),
                 studio_light_text_switch,
             ],
             spacing=12,
         )
 
+        # Board bg preview for the studio
+        board_bg_caption = (
+            f"Fundo: {studio_board_bg_name}"
+            if studio_board_bg_name
+            else "Sem fundo de tabuleiro (opcional)"
+        )
+        board_bg_preview_widget = ft.Container(
+            width=120, height=76,
+            border_radius=ft.BorderRadius.all(10),
+            border=ft.Border.all(1.2, palette["slot_border"]),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            bgcolor=palette["board_bg"],
+            alignment=ft.Alignment(0, 0),
+            content=ft.Image(
+                src=studio_board_bg_bytes,
+                fit=ft.BoxFit.COVER,
+                width=120, height=76,
+            ) if studio_board_bg_bytes else ft.Icon(
+                ft.Icons.WALLPAPER, color=palette["muted"], size=28
+            ),
+        )
+
         image_controls = ft.Column(
             controls=[
                 ft.Text(image_caption, size=13, color=theme["muted"]),
-                ft.Text(
-                    f"Zoom do verso: {preview_scale:.2f}x",
-                    size=12,
-                    color=theme["text"],
-                ),
+                ft.Text(f"Zoom do verso: {preview_scale:.2f}x", size=12, color=theme["text"]),
                 studio_zoom_slider,
+                action_chip("Escolher verso", ft.Icons.UPLOAD_FILE, choose_theme_studio_image),
+                ft.Divider(height=1, color=theme["slot_border"]),
+                ft.Text(board_bg_caption, size=13, color=theme["muted"]),
+                board_bg_preview_widget,
                 ft.Row(
                     controls=[
-                        action_chip("Escolher imagem", ft.Icons.UPLOAD_FILE, choose_theme_studio_image),
-                        action_chip("Atualizar preview", ft.Icons.VISIBILITY, preview_theme_studio),
+                        action_chip("Escolher fundo", ft.Icons.WALLPAPER, _choose_studio_board_bg),
+                        *(
+                            [action_chip("Remover fundo", ft.Icons.CLOSE, _clear_studio_board_bg)]
+                            if studio_board_bg_bytes else []
+                        ),
                     ],
-                    wrap=True,
-                    spacing=12,
-                    run_spacing=12,
+                    wrap=True, spacing=10, run_spacing=10,
                 ),
             ],
             spacing=12,
@@ -1134,6 +1555,185 @@ def main(page: ft.Page):
                             ft.Icons.AUTO_FIX_HIGH,
                         ),
                         ft.Container(width=panel_width(), content=footer_actions),
+                    ],
+                )
+            ],
+        )
+
+    def build_manage_themes_view():
+        theme = effective_theme()
+        custom_themes = {
+            name: data
+            for name, data in THEME_OPTIONS.items()
+            if data.get("custom")
+        }
+
+        def _edit_swatch(theme_name, color_key, hex_val):
+            return ft.GestureDetector(
+                on_tap=lambda e, tn=theme_name, ck=color_key, hv=hex_val: _open_color_picker(("edit", tn, ck), hv),
+                content=ft.Container(
+                    width=36, height=36,
+                    border_radius=ft.BorderRadius.all(8),
+                    bgcolor=hex_val,
+                    border=ft.Border.all(1.2, theme["slot_border"]),
+                    tooltip=f"Editar cor ({color_key})",
+                ),
+            )
+
+        theme_rows = []
+        for tname, tdata in custom_themes.items():
+            label_text = ft.Text(
+                tdata["label"],
+                size=15,
+                weight=ft.FontWeight.BOLD,
+                color=theme["text"],
+                expand=True,
+            )
+            swatches = ft.Row(
+                controls=[
+                    _edit_swatch(tname, "base", tdata["board_bg"]),
+                    _edit_swatch(tname, "surface", tdata["panel_bg"]),
+                    _edit_swatch(tname, "accent", tdata["accent"]),
+                ],
+                spacing=8,
+                tight=True,
+            )
+            row = ft.Container(
+                padding=14,
+                border_radius=ft.BorderRadius.all(18),
+                bgcolor=theme["panel_bg_alt"],
+                border=ft.Border.all(1.2, theme["slot_border"]),
+                content=ft.Column(
+                    controls=[
+                        ft.Row(
+                            controls=[
+                                label_text,
+                                ft.IconButton(
+                                    icon=ft.Icons.DRIVE_FILE_RENAME_OUTLINE,
+                                    icon_color=theme["accent"],
+                                    icon_size=20,
+                                    tooltip="Renomear",
+                                    on_click=lambda e, tn=tname: _open_rename_dialog(tn),
+                                ),
+                                ft.IconButton(
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    icon_color=ft.Colors.RED_400,
+                                    icon_size=20,
+                                    tooltip="Eliminar",
+                                    on_click=lambda e, tn=tname: _open_delete_confirm(tn),
+                                ),
+                            ],
+                            spacing=4,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                        ft.Text(
+                            "Toca numa cor para editar",
+                            size=11,
+                            color=theme["muted"],
+                        ),
+                        swatches,
+                    ],
+                    spacing=8,
+                    tight=True,
+                ),
+            )
+            theme_rows.append(row)
+
+        if not theme_rows:
+            theme_rows.append(
+                ft.Text(
+                    "Ainda não criaste nenhum tema personalizado.",
+                    size=13,
+                    color=theme["muted"],
+                )
+            )
+
+        # Append per-theme board bg editor row to each existing theme row
+        for i, tname in enumerate(custom_themes):
+            tback = BACK_OPTIONS.get(tname, {})
+            t_board_bg = tback.get("board_bg")
+            t_theme_data = custom_themes[tname]
+
+            bg_preview = ft.Container(
+                width=100, height=64,
+                border_radius=ft.BorderRadius.all(10),
+                border=ft.Border.all(1.2, theme["slot_border"]),
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                bgcolor=t_theme_data["board_bg"],
+                alignment=ft.Alignment(0, 0),
+                content=ft.Image(
+                    src=t_board_bg, fit=ft.BoxFit.COVER, width=100, height=64
+                ) if t_board_bg else ft.Icon(ft.Icons.WALLPAPER, color=theme["muted"], size=22),
+            )
+            bg_actions = ft.Row(
+                controls=[
+                    ft.IconButton(
+                        icon=ft.Icons.ADD_PHOTO_ALTERNATE,
+                        icon_color=theme["accent"],
+                        icon_size=20,
+                        tooltip="Escolher fundo",
+                        on_click=lambda e, tn=tname: _choose_board_bg_for_theme(tn),
+                    ),
+                    *(
+                        [ft.IconButton(
+                            icon=ft.Icons.CLOSE,
+                            icon_color=ft.Colors.RED_400,
+                            icon_size=20,
+                            tooltip="Remover fundo",
+                            on_click=lambda e, tn=tname: _clear_board_bg_for_theme(tn),
+                        )]
+                        if t_board_bg else []
+                    ),
+                ],
+                spacing=0,
+                tight=True,
+            )
+            bg_row = ft.Row(
+                controls=[
+                    bg_preview,
+                    ft.Column(
+                        controls=[
+                            ft.Text("Fundo do tabuleiro", size=11, color=theme["muted"]),
+                            bg_actions,
+                        ],
+                        spacing=4, tight=True,
+                    ),
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+            # Append to the existing theme container's column
+            if i < len(theme_rows):
+                theme_rows[i].content.controls.append(ft.Divider(height=1, color=theme["slot_border"]))
+                theme_rows[i].content.controls.append(bg_row)
+
+        themes_content = ft.Column(controls=theme_rows, spacing=10, tight=True)
+
+        actions = ft.Row(
+            controls=[
+                action_chip("Voltar", ft.Icons.ARROW_BACK, lambda e: navigate("/config")),
+                action_chip("Criar novo tema", ft.Icons.ADD, open_theme_studio),
+            ],
+            wrap=True,
+            spacing=12,
+            run_spacing=12,
+        )
+
+        return ft.Column(
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Column(
+                    spacing=16,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        surface_card(
+                            "Temas personalizados",
+                            "Edita cores, fundo, renomeia ou elimina os teus temas.",
+                            themes_content,
+                            ft.Icons.PALETTE,
+                        ),
+                        ft.Container(width=panel_width(), content=actions),
                     ],
                 )
             ],
@@ -1361,6 +1961,11 @@ def main(page: ft.Page):
                     lambda e: navigate(config_return_route),
                 ),
                 action_chip(
+                    "Gerir temas",
+                    ft.Icons.TUNE,
+                    lambda e: navigate("/manage-themes"),
+                ),
+                action_chip(
                     "Concluir",
                     ft.Icons.CHECK,
                     apply_config,
@@ -1504,7 +2109,16 @@ def main(page: ft.Page):
         page.controls.clear()
         page.scroll = ft.ScrollMode.HIDDEN if route == "/game" else ft.ScrollMode.AUTO
 
-        if route == "/config":
+        if route == "/manage-themes":
+            page.appbar = ft.AppBar(
+                leading=ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=lambda e: navigate("/config"),
+                ),
+                title=ft.Text("Gerir temas"),
+            )
+            page.add(safe_page(build_manage_themes_view()))
+        elif route == "/config":
             page.appbar = ft.AppBar(
                 leading=ft.IconButton(
                     icon=ft.Icons.ARROW_BACK,
