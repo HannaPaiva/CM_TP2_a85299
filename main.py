@@ -402,24 +402,32 @@ def main(page: ft.Page):
             selected_game_mode = e.control.data
             navigate("/intro")
 
+    def apply_visual_draft(refresh_route=True):
+        settings.card_back_name = draft_card_back_name
+        settings.theme_name = draft_theme_name
+        board.settings = settings
+        sync_board_visuals(update=False)
+        if refresh_route:
+            render_route(page.route or "/config")
+
     def select_draft_back(e):
         nonlocal draft_card_back_name
         if e.control.data in BACK_OPTIONS:
             draft_card_back_name = e.control.data
-            render_route("/config")
+            apply_visual_draft()
 
     def select_draft_theme(e):
         nonlocal draft_theme_name
         if e.control.data in THEME_OPTIONS:
             draft_theme_name = e.control.data
-            render_route("/config")
+            apply_visual_draft()
 
     def apply_preset(e):
         nonlocal draft_card_back_name, draft_theme_name
         preset = e.control.data
         draft_card_back_name = preset["back"]
         draft_theme_name = preset["theme"]
-        render_route("/config")
+        apply_visual_draft()
 
     async def save_game():
         snapshot = board.capture_state(include_initial=True)
@@ -539,10 +547,7 @@ def main(page: ft.Page):
             autosave_current_state_sync()
 
     def apply_config(e=None):
-        settings.card_back_name = draft_card_back_name
-        settings.theme_name = draft_theme_name
-        board.settings = settings
-        sync_board_visuals(update=False)
+        apply_visual_draft(refresh_route=False)
         navigate(config_return_route)
         board.set_status("Visual atualizado.")
 
@@ -947,7 +952,7 @@ def main(page: ft.Page):
                     lambda e: navigate(config_return_route),
                 ),
                 action_chip(
-                    "Aplicar visual",
+                    "Concluir",
                     ft.Icons.CHECK,
                     apply_config,
                     tone="filled",
