@@ -1,6 +1,8 @@
 import asyncio
 import colorsys
 import json
+import math
+import random
 from pathlib import Path
 
 import flet as ft
@@ -1155,6 +1157,8 @@ def main(page: ft.Page):
         current_route = page.route or "/intro"
         if current_route == "/game" and route == "/intro":
             autosave_current_state_sync()
+        if route != "/game":
+            hide_victory_celebration(immediate=True)
         page.route = route
         render_route(route)
 
@@ -1334,6 +1338,7 @@ def main(page: ft.Page):
                 render_route("/intro")
             return False
 
+        hide_victory_celebration(immediate=True)
         board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
         sync_settings_from_board()
         sync_board_visuals(update=False)
@@ -1361,6 +1366,7 @@ def main(page: ft.Page):
         render_route(page.route or "/intro")
 
     def start_new_game_from_intro(e):
+        hide_victory_celebration(immediate=True)
         board.settings = settings
         board.start_new_game()
         show_game()
@@ -1369,9 +1375,11 @@ def main(page: ft.Page):
         show_game()
 
     def new_game(e):
+        hide_victory_celebration(immediate=True)
         board.start_new_game()
 
     def restart(e):
+        hide_victory_celebration(immediate=True)
         board.restart_game()
 
     def undo(e):
@@ -1382,6 +1390,619 @@ def main(page: ft.Page):
 
     def load_clicked(e):
         page.run_task(load_game)
+
+    FIREWORK_SLOT_COUNT = 4
+    FIREWORK_PARTICLE_COUNT = 12
+    FIREWORK_PALETTE = [
+        "#FFD166",
+        "#FF7A45",
+        "#FF4FA3",
+        "#7CF7FF",
+        "#8DF26A",
+        "#F8F4E3",
+    ]
+
+    victory_visible = False
+    victory_sequence = 0
+
+    def make_victory_title_card(text, eyebrow):
+        return ft.Container(
+            key=f"title:{text}",
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        eyebrow,
+                        size=12,
+                        weight=ft.FontWeight.W_600,
+                        color="#FFD166",
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Text(
+                        text,
+                        size=36 if is_narrow() else 42,
+                        weight=ft.FontWeight.W_700,
+                        color="#F8F4E3",
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                ],
+                spacing=4,
+                tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def make_victory_subtitle_card(text):
+        return ft.Container(
+            key=f"subtitle:{text}",
+            width=420 if not is_narrow() else None,
+            content=ft.Text(
+                text,
+                size=14 if is_narrow() else 15,
+                color="#E8DED0",
+                text_align=ft.TextAlign.CENTER,
+            ),
+        )
+
+    def make_victory_action_button(label, icon, filled):
+        background = "#FFD166" if filled else "#22161F33"
+        border_color = "#FFD166" if filled else "#55FFD166"
+        text_color = "#120F16" if filled else "#F8F4E3"
+        icon_color = "#120F16" if filled else "#FFD166"
+        return ft.Container(
+            ink=True,
+            width=230 if not is_narrow() else None,
+            padding=ft.Padding.symmetric(horizontal=22, vertical=16),
+            border_radius=ft.BorderRadius.all(999),
+            bgcolor=background,
+            border=ft.Border.all(1.3, border_color),
+            shadow=ft.BoxShadow(
+                blur_radius=24 if filled else 18,
+                color="#55FFD166" if filled else "#22000000",
+                offset=ft.Offset(0, 8),
+            ),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(icon, size=20, color=icon_color),
+                    ft.Text(
+                        label,
+                        size=15,
+                        weight=ft.FontWeight.W_600,
+                        color=text_color,
+                    ),
+                ],
+                spacing=10,
+                tight=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def make_victory_glow(color, size, **position):
+        return ft.Container(
+            width=size,
+            height=size,
+            shape=ft.BoxShape.CIRCLE,
+            bgcolor=color,
+            opacity=0,
+            scale=0.65,
+            shadow=ft.BoxShadow(
+                blur_radius=180,
+                spread_radius=30,
+                color=color,
+                offset=ft.Offset(0, 0),
+            ),
+            animate_opacity=ft.Animation(380, ft.AnimationCurve.EASE_OUT),
+            animate_scale=ft.Animation(1600, ft.AnimationCurve.EASE_OUT_CUBIC),
+            animate_offset=ft.Animation(2600, ft.AnimationCurve.EASE_IN_OUT_SINE),
+            **position,
+        )
+
+    def make_firework_particle(color):
+        return ft.Container(
+            width=10,
+            height=10,
+            left=-80,
+            top=-80,
+            opacity=0,
+            scale=0.15,
+            shape=ft.BoxShape.CIRCLE,
+            bgcolor=color,
+            shadow=ft.BoxShadow(
+                blur_radius=18,
+                spread_radius=1,
+                color=color,
+                offset=ft.Offset(0, 0),
+            ),
+            animate_position=ft.Animation(760, ft.AnimationCurve.EASE_OUT_CUBIC),
+            animate_scale=ft.Animation(760, ft.AnimationCurve.EASE_OUT),
+            animate_opacity=ft.Animation(760, ft.AnimationCurve.EASE_OUT),
+        )
+
+    victory_badge_text = ft.Text(
+        "QUATRO FUNDACOES FECHADAS",
+        size=12,
+        weight=ft.FontWeight.W_600,
+        color="#120F16",
+    )
+    victory_score_value = ft.Text(
+        "0",
+        size=22,
+        weight=ft.FontWeight.W_700,
+        color="#F8F4E3",
+    )
+    victory_time_value = ft.Text(
+        "00:00",
+        size=22,
+        weight=ft.FontWeight.W_700,
+        color="#F8F4E3",
+    )
+    victory_hint_text = ft.Text(
+        "Toca fora do painel para voltar a ver a mesa.",
+        size=12,
+        color="#BFAE95",
+        text_align=ft.TextAlign.CENTER,
+    )
+    victory_title_switcher = ft.AnimatedSwitcher(
+        content=make_victory_title_card("VITORIA TOTAL", "FINAL CINEMATICO"),
+        transition=ft.AnimatedSwitcherTransition.SCALE,
+        duration=520,
+        reverse_duration=180,
+        switch_in_curve=ft.AnimationCurve.BOUNCE_OUT,
+        switch_out_curve=ft.AnimationCurve.EASE_IN,
+    )
+    victory_subtitle_switcher = ft.AnimatedSwitcher(
+        content=make_victory_subtitle_card("As quatro fundacoes foram tomadas."),
+        transition=ft.AnimatedSwitcherTransition.FADE,
+        duration=420,
+        reverse_duration=140,
+        switch_in_curve=ft.AnimationCurve.EASE_OUT,
+        switch_out_curve=ft.AnimationCurve.EASE_IN,
+    )
+    victory_new_game_button = make_victory_action_button("Nova partida", ft.Icons.CASINO, True)
+    victory_close_button = make_victory_action_button("Ver mesa", ft.Icons.VISIBILITY, False)
+    victory_buttons = ft.Row(
+        wrap=True,
+        spacing=12,
+        run_spacing=12,
+        alignment=ft.MainAxisAlignment.CENTER,
+        controls=[victory_new_game_button, victory_close_button],
+    )
+
+    def make_victory_stat_card(icon, label, value_control):
+        return ft.Container(
+            padding=ft.Padding.symmetric(horizontal=16, vertical=14),
+            border_radius=ft.BorderRadius.all(22),
+            bgcolor="#2218232E",
+            border=ft.Border.all(1.1, "#44FFD166"),
+            content=ft.Row(
+                controls=[
+                    ft.Container(
+                        width=38,
+                        height=38,
+                        border_radius=ft.BorderRadius.all(14),
+                        bgcolor="#33FFD166",
+                        alignment=ft.Alignment.CENTER,
+                        content=ft.Icon(icon, size=20, color="#FFD166"),
+                    ),
+                    ft.Column(
+                        controls=[
+                            ft.Text(label, size=11, color="#BFAE95"),
+                            value_control,
+                        ],
+                        spacing=2,
+                        tight=True,
+                    ),
+                ],
+                spacing=10,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    victory_stats = ft.Row(
+        wrap=True,
+        spacing=12,
+        run_spacing=12,
+        alignment=ft.MainAxisAlignment.CENTER,
+        controls=[
+            make_victory_stat_card(ft.Icons.STARS, "Score final", victory_score_value),
+            make_victory_stat_card(ft.Icons.SCHEDULE, "Tempo final", victory_time_value),
+        ],
+    )
+
+    victory_panel = ft.Container(
+        width=560,
+        opacity=0,
+        scale=0.82,
+        offset=ft.Offset(0, 0.08),
+        padding=ft.Padding.symmetric(horizontal=24, vertical=24),
+        border_radius=ft.BorderRadius.all(34),
+        gradient=ft.LinearGradient(
+            colors=["#FF120F16", "#FF1D1322", "#FF090A10"],
+            begin=ft.Alignment(-1, -1),
+            end=ft.Alignment(1, 1),
+        ),
+        border=ft.Border.all(1.4, "#55FFD166"),
+        shadow=ft.BoxShadow(
+            blur_radius=36,
+            spread_radius=2,
+            color="#77000000",
+            offset=ft.Offset(0, 14),
+        ),
+        animate_opacity=ft.Animation(260, ft.AnimationCurve.EASE_OUT),
+        animate_scale=ft.Animation(720, ft.AnimationCurve.BOUNCE_OUT),
+        animate_offset=ft.Animation(720, ft.AnimationCurve.EASE_OUT_CUBIC),
+        content=ft.Column(
+            spacing=18,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Container(
+                    padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+                    border_radius=ft.BorderRadius.all(999),
+                    bgcolor="#FFD166",
+                    content=ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.LOCAL_FIRE_DEPARTMENT, size=18, color="#120F16"),
+                            victory_badge_text,
+                        ],
+                        spacing=8,
+                        tight=True,
+                        alignment=ft.MainAxisAlignment.CENTER,
+                    ),
+                ),
+                victory_title_switcher,
+                victory_subtitle_switcher,
+                victory_stats,
+                victory_buttons,
+                victory_hint_text,
+            ],
+        ),
+    )
+
+    victory_backdrop = ft.Container(
+        left=0,
+        right=0,
+        top=0,
+        bottom=0,
+        blur=8,
+        bgcolor="#B8060910",
+        gradient=ft.LinearGradient(
+            colors=["#F505060B", "#E5110E1C", "#FF04050A"],
+            begin=ft.Alignment(-0.2, -1),
+            end=ft.Alignment(0.2, 1),
+        ),
+        on_click=lambda e: hide_victory_celebration(),
+    )
+    victory_flash = ft.Container(
+        left=0,
+        right=0,
+        top=0,
+        bottom=0,
+        opacity=0,
+        gradient=ft.LinearGradient(
+            colors=["#00FFF1D0", "#55FFD166", "#00FF7A45"],
+            begin=ft.Alignment(0, -1),
+            end=ft.Alignment(0, 1),
+        ),
+        animate_opacity=ft.Animation(220, ft.AnimationCurve.EASE_OUT),
+    )
+    victory_glow_left = make_victory_glow("#44FF7A45", 280, left=-80, top=-40)
+    victory_glow_right = make_victory_glow("#447CF7FF", 320, right=-120, top=80)
+    victory_glow_bottom = make_victory_glow("#33FFD166", 340, left=40, bottom=-150)
+
+    firework_slots = []
+    firework_controls = []
+    for slot_index in range(FIREWORK_SLOT_COUNT):
+        ring = ft.Container(
+            width=26,
+            height=26,
+            left=-120,
+            top=-120,
+            opacity=0,
+            scale=0.2,
+            shape=ft.BoxShape.CIRCLE,
+            border=ft.Border.all(2.4, FIREWORK_PALETTE[slot_index % len(FIREWORK_PALETTE)]),
+            animate_position=ft.Animation(720, ft.AnimationCurve.EASE_OUT_CUBIC),
+            animate_scale=ft.Animation(720, ft.AnimationCurve.EASE_OUT),
+            animate_opacity=ft.Animation(720, ft.AnimationCurve.EASE_OUT),
+        )
+        flare = ft.Container(
+            width=36,
+            height=36,
+            left=-140,
+            top=-140,
+            opacity=0,
+            scale=0.35,
+            shape=ft.BoxShape.CIRCLE,
+            bgcolor="#88FFF1D0",
+            shadow=ft.BoxShadow(
+                blur_radius=38,
+                spread_radius=8,
+                color="#66FFD166",
+                offset=ft.Offset(0, 0),
+            ),
+            animate_position=ft.Animation(260, ft.AnimationCurve.EASE_OUT),
+            animate_scale=ft.Animation(260, ft.AnimationCurve.EASE_OUT),
+            animate_opacity=ft.Animation(260, ft.AnimationCurve.EASE_OUT),
+        )
+        particles = [
+            make_firework_particle(
+                FIREWORK_PALETTE[(slot_index + particle_index) % len(FIREWORK_PALETTE)]
+            )
+            for particle_index in range(FIREWORK_PARTICLE_COUNT)
+        ]
+        firework_slots.append(
+            {
+                "ring": ring,
+                "flare": flare,
+                "particles": particles,
+            }
+        )
+        firework_controls.extend([ring, flare, *particles])
+
+    victory_overlay = ft.Container(
+        left=0,
+        right=0,
+        top=0,
+        bottom=0,
+        opacity=0,
+        ignore_interactions=True,
+        animate_opacity=ft.Animation(280, ft.AnimationCurve.EASE_OUT),
+        content=ft.Stack(
+            expand=True,
+            controls=[
+                victory_backdrop,
+                victory_glow_left,
+                victory_glow_right,
+                victory_glow_bottom,
+                *firework_controls,
+                victory_flash,
+                ft.Container(
+                    expand=True,
+                    alignment=ft.Alignment.CENTER,
+                    padding=ft.Padding.symmetric(horizontal=12, vertical=18),
+                    content=victory_panel,
+                ),
+            ],
+        ),
+    )
+
+    def sync_victory_layout():
+        available_width = max(300, page_width() - 28)
+        victory_panel.width = min(560, available_width)
+        button_width = None if not is_narrow() else max(220, available_width - 36)
+        victory_new_game_button.width = button_width
+        victory_close_button.width = button_width
+
+    def reset_fireworks():
+        for glow in (victory_glow_left, victory_glow_right, victory_glow_bottom):
+            glow.opacity = 0
+            glow.scale = 0.65
+            glow.offset = ft.Offset(0, 0)
+        victory_flash.opacity = 0
+        for slot in firework_slots:
+            slot["ring"].left = -120
+            slot["ring"].top = -120
+            slot["ring"].opacity = 0
+            slot["ring"].scale = 0.2
+            slot["flare"].left = -140
+            slot["flare"].top = -140
+            slot["flare"].opacity = 0
+            slot["flare"].scale = 0.35
+            for particle in slot["particles"]:
+                particle.left = -120
+                particle.top = -120
+                particle.opacity = 0
+                particle.scale = 0.15
+
+    def victory_sequence_active(sequence_id):
+        return sequence_id == victory_sequence and (page.route or "/intro") == "/game"
+
+    def hide_victory_celebration(e=None, immediate=False):
+        nonlocal victory_visible, victory_sequence
+        victory_sequence += 1
+        victory_visible = False
+        victory_overlay.ignore_interactions = True
+        victory_overlay.opacity = 0
+        victory_panel.opacity = 0
+        victory_panel.scale = 0.82
+        victory_panel.offset = ft.Offset(0, 0.08)
+        reset_fireworks()
+        try:
+            page.update()
+        except Exception:
+            pass
+
+    async def launch_firework(slot_index, center_x, center_y, delay, sequence_id):
+        await asyncio.sleep(delay)
+        if not victory_sequence_active(sequence_id):
+            return
+
+        slot = firework_slots[slot_index % len(firework_slots)]
+        burst_color = FIREWORK_PALETTE[
+            (slot_index + random.randrange(len(FIREWORK_PALETTE))) % len(FIREWORK_PALETTE)
+        ]
+        ring = slot["ring"]
+        flare = slot["flare"]
+        ring.border = ft.Border.all(2.4, burst_color)
+        ring.left = center_x - 13
+        ring.top = center_y - 13
+        ring.opacity = 0.95
+        ring.scale = 0.22
+
+        flare.bgcolor = burst_color
+        flare.shadow = ft.BoxShadow(
+            blur_radius=42,
+            spread_radius=8,
+            color=burst_color,
+            offset=ft.Offset(0, 0),
+        )
+        flare.left = center_x - 18
+        flare.top = center_y - 18
+        flare.opacity = 0.9
+        flare.scale = 0.4
+
+        for particle_index, particle in enumerate(slot["particles"]):
+            particle.bgcolor = FIREWORK_PALETTE[
+                (slot_index + particle_index) % len(FIREWORK_PALETTE)
+            ]
+            particle.shadow = ft.BoxShadow(
+                blur_radius=22,
+                spread_radius=1,
+                color=particle.bgcolor,
+                offset=ft.Offset(0, 0),
+            )
+            particle.left = center_x - 5
+            particle.top = center_y - 5
+            particle.opacity = 1
+            particle.scale = 1
+
+        try:
+            page.update()
+        except Exception:
+            return
+
+        await asyncio.sleep(0.04)
+        if not victory_sequence_active(sequence_id):
+            return
+
+        ring.scale = 6.2
+        ring.opacity = 0
+        flare.scale = 1.5
+        flare.opacity = 0
+
+        for particle_index, particle in enumerate(slot["particles"]):
+            angle = (math.tau / FIREWORK_PARTICLE_COUNT) * particle_index
+            angle += random.uniform(-0.12, 0.12)
+            distance = random.randint(80, 170)
+            particle.left = center_x + math.cos(angle) * distance - 5
+            particle.top = center_y + math.sin(angle) * distance - 5
+            particle.opacity = 0
+            particle.scale = 0.2
+
+        try:
+            page.update()
+        except Exception:
+            return
+
+    async def play_victory_celebration():
+        nonlocal victory_visible, victory_sequence
+        if (page.route or "/intro") != "/game" or victory_visible:
+            return
+
+        victory_visible = True
+        victory_sequence += 1
+        sequence_id = victory_sequence
+
+        sync_victory_layout()
+        reset_fireworks()
+        victory_score_value.value = str(board.score)
+        victory_time_value.value = board.format_elapsed()
+        victory_title_switcher.transition = ft.AnimatedSwitcherTransition.SCALE
+        victory_title_switcher.content = make_victory_title_card("VITORIA TOTAL", "FINAL CINEMATICO")
+        victory_subtitle_switcher.transition = ft.AnimatedSwitcherTransition.FADE
+        victory_subtitle_switcher.content = make_victory_subtitle_card(
+            "As quatro fundacoes fecharam como o ultimo ato de um filme de acao."
+        )
+        victory_badge_text.value = "QUATRO FUNDACOES FECHADAS"
+        victory_overlay.ignore_interactions = False
+        victory_overlay.opacity = 0
+        victory_panel.opacity = 0
+        victory_panel.scale = 0.82
+        victory_panel.offset = ft.Offset(0, 0.08)
+
+        try:
+            page.update()
+        except Exception:
+            return
+
+        await asyncio.sleep(0.03)
+        if not victory_sequence_active(sequence_id):
+            return
+
+        victory_overlay.opacity = 1
+        victory_panel.opacity = 1
+        victory_panel.scale = 1
+        victory_panel.offset = ft.Offset(0, 0)
+        victory_flash.opacity = 0.16
+        victory_glow_left.opacity = 0.42
+        victory_glow_left.scale = 1.15
+        victory_glow_left.offset = ft.Offset(0.14, -0.06)
+        victory_glow_right.opacity = 0.36
+        victory_glow_right.scale = 1.08
+        victory_glow_right.offset = ft.Offset(-0.1, 0.04)
+        victory_glow_bottom.opacity = 0.26
+        victory_glow_bottom.scale = 1.05
+        victory_glow_bottom.offset = ft.Offset(0.08, -0.08)
+        try:
+            page.update()
+        except Exception:
+            return
+
+        await asyncio.sleep(0.18)
+        if not victory_sequence_active(sequence_id):
+            return
+
+        victory_flash.opacity = 0
+        try:
+            page.update()
+        except Exception:
+            return
+
+        width = max(320, page_width() - 20)
+        height = max(520, int(page.height or 820) - 32)
+        bursts = [
+            (0, width * 0.18, height * 0.2, 0.0),
+            (1, width * 0.82, height * 0.22, 0.14),
+            (2, width * 0.26, height * 0.56, 0.32),
+            (3, width * 0.74, height * 0.58, 0.5),
+        ]
+        for slot_index, x_pos, y_pos, delay in bursts:
+            asyncio.create_task(
+                launch_firework(slot_index, int(x_pos), int(y_pos), delay, sequence_id)
+            )
+
+        await asyncio.sleep(0.48)
+        if not victory_sequence_active(sequence_id):
+            return
+
+        victory_title_switcher.transition = ft.AnimatedSwitcherTransition.ROTATION
+        victory_title_switcher.content = make_victory_title_card(
+            "MISSAO COMPLETA",
+            "SEM SOBREVIVENTES NO TABULEIRO",
+        )
+        victory_subtitle_switcher.content = make_victory_subtitle_card(
+            "Explosao de pontos, cronometro parado e uma mesa completamente dominada."
+        )
+        try:
+            page.update()
+        except Exception:
+            return
+
+        await asyncio.sleep(0.8)
+        if not victory_sequence_active(sequence_id):
+            return
+
+        victory_title_switcher.transition = ft.AnimatedSwitcherTransition.SCALE
+        victory_title_switcher.content = make_victory_title_card("TABULEIRO DOMINADO", "CORTE FINAL")
+        victory_subtitle_switcher.content = make_victory_subtitle_card(
+            "Respira, aprecia a cena e decide se quer fechar a mesa ou entrar noutra ronda."
+        )
+        try:
+            page.update()
+        except Exception:
+            return
+
+    def start_new_game_after_victory(e=None):
+        hide_victory_celebration(immediate=True)
+        board.start_new_game()
+
+    def trigger_victory_celebration():
+        page.run_task(play_victory_celebration)
+
+    board.on_win = trigger_victory_celebration
+    victory_new_game_button.on_click = start_new_game_after_victory
+    victory_close_button.on_click = hide_victory_celebration
 
     def handle_close(e):
         current_route = page.route or "/intro"
@@ -2489,6 +3110,7 @@ Ou começa um jogo novo!''',
     def build_game_view():
         bottom_padding = 8 if is_narrow() else 14
         side_padding = 6 if is_narrow() else page_padding()
+        sync_victory_layout()
         header = ft.Column(
             spacing=6,
             tight=True,
@@ -2525,20 +3147,31 @@ Ou começa um jogo novo!''',
             expand=True,
             maintain_bottom_view_padding=True,
             minimum_padding=ft.Padding.only(bottom=bottom_padding),
-            content=ft.Container(
+            content=ft.Stack(
                 expand=True,
-                padding=ft.Padding.only(left=side_padding, right=side_padding, top=6, bottom=bottom_padding),
-                content=ft.Column(
-                    expand=True,
-                    spacing=6,
-                    controls=[
-                        header,
-                        ft.Container(
-                            expand=True,
-                            content=board_frame,
+                controls=[
+                    ft.Container(
+                        expand=True,
+                        padding=ft.Padding.only(
+                            left=side_padding,
+                            right=side_padding,
+                            top=6,
+                            bottom=bottom_padding,
                         ),
-                    ],
-                ),
+                        content=ft.Column(
+                            expand=True,
+                            spacing=6,
+                            controls=[
+                                header,
+                                ft.Container(
+                                    expand=True,
+                                    content=board_frame,
+                                ),
+                            ],
+                        ),
+                    ),
+                    victory_overlay,
+                ],
             ),
         )
 
@@ -2601,6 +3234,7 @@ Ou começa um jogo novo!''',
 
     def handle_resize(e):
         page.padding = page_padding()
+        sync_victory_layout()
         board.apply_visual_preferences(update=False)
         board.display_waste(update=False)
         render_route(page.route or "/intro")

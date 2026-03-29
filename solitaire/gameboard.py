@@ -210,9 +210,13 @@ class GameBoard(ft.Stack):
             self.display_waste()
 
         self.apply_score_for_move(old_slot.type, new_slot.type)
+        just_won = False
         if self.check_if_you_won():
+            just_won = not self._game_won
             self._game_won = True
         self.notify_change(autosave=True)
+        if just_won and self.on_win is not None:
+            self.on_win()
 
     def undo_move(self):
         if not self.history:
