@@ -1,26 +1,13 @@
 
-Deve funcionar de forma responsiva corretamente num dispositivo móvel (iOS ou Android) e num computador (Windows, macOS ou Linux) e tablet.
-
-✅ Todos os objetivos especificados abaixo são obrigatórios e devem ser cumpridos na ordem em que são apresentados.
-
-🌟 No entanto, sinta-se à vontade para explorar e experimentar funcionalidades adicionais, desde que as funcionalidades obrigatórias estejam implementadas e a aplicação esteja a funcionar corretamente.
-
-🎬 Objetivo 1 – Base
-Siga todos os passos e complete o tutorial da app atribuída
-
-📋 Objetivo 2 – Funcionalidades Extra
-Para este objetivo, imagine que está a desenvolver a aplicação para um cliente que contratualizou um conjunto particular de funcionalidades 
-
 🧑‍💻 Implemente e/ou confirme se a aplicação possui as seguintes funcionalidades, de acordo com o tema atribuído:
-🃏 Jogo de Cartas
+
 - Reiniciar o jogo.
 - Desfazer jogadas (i.e., undo).
 - Salvar e carregar o estado do jogo para e de um storage em duckdb + local storage
 - Escolher a imagem traseira das cartas, entre 4 opções diferentes. (configs presentes na raiz do projeto em solitaire/assets/backs)
 - Sistema de pontuação com cronómetro visível durante toda a partida.
-Use como layout base o do solitaire & Casual Games do windows
 
-🆕 Objetivo 3 – Duas funcionalidades novas
+
 - Faça níveis de dificuldade e deixe espaço para diferentes modos de jogo, 
 e quero poder mudar o tema da janela de jogo como um todo. Um tema que combine com cada um dos backs dos assets
 mas quero poder mudar singularmente so o back e so o tema. (ai trocaria a cor do board, basicamente) 
@@ -29,9 +16,4 @@ Elabore a funcionalidade de
 
 📄 Elabore um ficheiro README.md (formato markdown) na raiz do projeto, onde apresente os motivos de inclusão das funcionalidades extra e uma descrição detalhada das mesmas (~20% da avaliação deste objetivo):
 Escreva cerca de 200 – 300 palavras por funcionalidade, em português (pt-PT).
-
-Inclua instruções de utilização, se necessário.
-
-🧪 Teste a aplicação em diferentes dispositivos/sistemas operativos para garantir que está a funcionar corretamente.
-
 

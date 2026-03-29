@@ -170,9 +170,9 @@ class GameBoard(ft.Stack):
         if self.can_update():
             self.update()
         if announce:
-            self.set_status("Nova partida iniciada.")
+            self.set_status("Nova partida iniciada.", autosave=True)
         else:
-            self.notify_change()
+            self.notify_change(autosave=False)
 
     def restart_game(self):
         if self.initial_snapshot is None:
@@ -207,7 +207,7 @@ class GameBoard(ft.Stack):
         self.apply_score_for_move(old_slot.type, new_slot.type)
         if self.check_if_you_won():
             self._game_won = True
-        self.notify_change()
+        self.notify_change(autosave=True)
 
     def remember_state_for_undo(self):
         self.history.append(self.capture_state(include_initial=False))
@@ -220,7 +220,7 @@ class GameBoard(ft.Stack):
             return
         snapshot = self.history.pop()
         self.restore_state(snapshot, clear_history=False, set_initial=False, announce=False)
-        self.set_status("Ultima jogada desfeita.")
+        self.set_status("Ultima jogada desfeita.", autosave=True)
 
     def capture_state(self, include_initial=True):
         state = {
@@ -288,7 +288,7 @@ class GameBoard(ft.Stack):
             top_card.place(self.waste)
             top_card.turn_face_up()
         self.display_waste()
-        self.notify_change()
+        self.notify_change(autosave=True)
 
     def restart_stock(self):
         self.waste.pile.reverse()
@@ -298,7 +298,7 @@ class GameBoard(ft.Stack):
             card.place(self.stock)
         if self.settings.game_mode == "classic":
             self.score -= 20
-        self.notify_change()
+        self.notify_change(autosave=True)
 
     def move_on_top(self, cards_to_drag, update=True):
         for card in cards_to_drag:

@@ -275,6 +275,8 @@ def main(page: ft.Page):
             intro_status.update()
         except Exception:
             pass
+        if autosave:
+            page.run_task(save_game)
 
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.setup()
@@ -391,6 +393,32 @@ def main(page: ft.Page):
         loaded = await load_game()
         if loaded:
             show_game()
+
+    async def auto_load_on_start():
+        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name
+        snapshot = None
+        try:
+            snapshot = storage.load_game()
+        except Exception:
+            pass
+        if snapshot is None:
+            try:
+                preferences = ft.SharedPreferences()
+                raw_state = await preferences.get(LOCAL_GAME_STATE_KEY)
+                if raw_state:
+                    snapshot = json.loads(raw_state)
+            except Exception:
+                pass
+        if snapshot is None:
+            return
+        board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
+        settings = board.settings
+        selected_game_mode = settings.game_mode
+        draft_card_back_name = settings.card_back_name
+        draft_theme_name = settings.theme_name
+        apply_page_theme()
+        board.set_status("Partida anterior carregada.")
+        render_route(page.route or "/intro")
 
     def start_new_game_from_intro(e):
         nonlocal settings
@@ -998,6 +1026,7 @@ def main(page: ft.Page):
     page.on_resize = handle_resize
     page.run_task(run_timer)
     navigate("/intro")
+    page.run_task(auto_load_on_start)
 
 
 if __name__ == "__main__":
