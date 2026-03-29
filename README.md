@@ -147,6 +147,8 @@ A segunda funcionalidade extra consistiu na criação de um sistema de **persona
 
 Durante a implementação da troca de fundos, versos e temas, tornou-se evidente que limitar a aplicação a um pequeno conjunto fixo de escolhas acabava por reduzir bastante o interesse da componente visual. Como havia alguma indecisão sobre que combinações deveriam ficar predefinidas, fez mais sentido evoluir a solução para algo mais flexível e mais interessante para o utilizador final.
 
+Outro motivo é porque eu adoro fazer arte e queria fazer personalizações de fundos para baralhos para este trabalho, e queria uma forma fácil de fazê-lo, então implementei um manager de fundos de board e de cartas.
+
 Assim, em vez de impor apenas um visual fechado, optei por permitir que o utilizador pudesse **configurar o próprio board ao seu gosto**, escolhendo cores, imagens e combinações visuais de forma mais livre. Esta decisão valorizou a aplicação do ponto de vista da experiência de utilização e tornou a personalização uma parte realmente forte do projeto.
 
 ### O que foi implementado

@@ -16,6 +16,7 @@ sobretudo a camada de apresentacao e de fluxo.
 """
 
 import asyncio
+import base64
 import colorsys
 import json
 import math
@@ -153,7 +154,9 @@ def main(page: ft.Page):
 
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
-    file_picker_busy = False
+
+    shared_prefs = ft.SharedPreferences()
+    page.services.append(shared_prefs)
 
     # Color picker state
     picker_target = None   # "base"|"surface"|"accent"|("edit", theme_name, color_key)
@@ -456,11 +459,6 @@ def main(page: ft.Page):
         return intro_status.value not in {"", "Pronto para jogar.", "Partida anterior carregada."}
 
     async def pick_single_image(dialog_title, on_error=None):
-        nonlocal file_picker_busy
-        if file_picker_busy:
-            return None
-
-        file_picker_busy = True
         try:
             files = await file_picker.pick_files(
                 dialog_title=dialog_title,
@@ -468,16 +466,10 @@ def main(page: ft.Page):
                 allow_multiple=False,
                 with_data=True,
             )
-        except RuntimeError as exc:
+        except Exception:
             if on_error is not None:
-                error_text = str(exc).lower()
-                if "timeout" in error_text:
-                    on_error("O seletor de ficheiros expirou. Tenta novamente.")
-                else:
-                    on_error("Nao foi possivel abrir o seletor de ficheiros.")
+                on_error("Nao foi possivel abrir o seletor de ficheiros.")
             return None
-        finally:
-            file_picker_busy = False
 
         if not files:
             return None
@@ -495,6 +487,39 @@ def main(page: ft.Page):
             "name": selected_file.name,
             "bytes": selected_bytes,
         }
+
+    def _bytes_to_data_url(data: bytes) -> str:
+        """Converte bytes de imagem para um data URL base64 seguro para Flet web."""
+        if data[:4] == b'\x89PNG':
+            mime = "image/png"
+        elif data[:2] == b'\xff\xd8':
+            mime = "image/jpeg"
+        elif len(data) > 12 and data[8:12] == b'WEBP':
+            mime = "image/webp"
+        elif data[:6] in (b'GIF87a', b'GIF89a'):
+            mime = "image/gif"
+        else:
+            mime = "image/png"
+        return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+
+    def image_source_kwargs(image_source):
+        """
+        Converte uma origem de imagem para os kwargs aceites pelos widgets Flet.
+        Bytes em memoria sao convertidos para data URL base64 para evitar crash
+        no websocket do Flet web ao serializar bytes brutos em msgpack.
+        """
+        if isinstance(image_source, (bytes, bytearray, memoryview)):
+            return {"src": _bytes_to_data_url(bytes(image_source))}
+        return {"src": image_source}
+
+    def build_decoration_image(image_source, **kwargs):
+        """
+        Cria uma `DecorationImage` a partir de um caminho ou bytes em memoria.
+        """
+        return ft.DecorationImage(
+            **image_source_kwargs(image_source),
+            **kwargs,
+        )
 
     # --- widget helpers ---
 
@@ -1018,8 +1043,8 @@ def main(page: ft.Page):
         nonlocal studio_board_bg_bytes, studio_board_bg_name
         selected = await pick_single_image(
             "Escolhe o fundo do tabuleiro",
-            on_error=lambda message: (
-                setattr(theme_studio_status, "value", message),
+            on_error=lambda msg: (
+                setattr(theme_studio_status, "value", msg),
                 render_route("/theme-studio"),
             ),
         )
@@ -1045,7 +1070,18 @@ def main(page: ft.Page):
             selected = await pick_single_image("Fundo do tabuleiro para este tema")
             if selected is None:
                 return
-            update_custom_theme_board_bg(theme_name, selected["bytes"], selected["name"])
+            try:
+                update_custom_theme_board_bg(theme_name, selected["bytes"], selected["name"])
+            except ValueError as exc:
+                page.show_dialog(
+                    ft.AlertDialog(
+                        title=ft.Text("Nao foi possivel atualizar o fundo"),
+                        content=ft.Text(str(exc)),
+                        actions=[ft.TextButton("Fechar", on_click=lambda e: page.pop_dialog())],
+                        actions_alignment=ft.MainAxisAlignment.END,
+                    )
+                )
+                return
             refresh_custom_theme_registry()
             apply_page_theme()
             render_route("/manage-themes")
@@ -1053,7 +1089,18 @@ def main(page: ft.Page):
 
     def _clear_board_bg_for_theme(theme_name):
         nonlocal draft_board_bg_style, draft_board_bg_target
-        update_custom_theme_board_bg(theme_name, None, None)
+        try:
+            update_custom_theme_board_bg(theme_name, None, None)
+        except ValueError as exc:
+            page.show_dialog(
+                ft.AlertDialog(
+                    title=ft.Text("Nao foi possivel remover o fundo"),
+                    content=ft.Text(str(exc)),
+                    actions=[ft.TextButton("Fechar", on_click=lambda e: page.pop_dialog())],
+                    actions_alignment=ft.MainAxisAlignment.END,
+                )
+            )
+            return
         refresh_custom_theme_registry()
         if settings.board_bg_style == "image" and settings.board_bg_target == theme_name:
             settings.board_bg_style = "theme_color"
@@ -1086,7 +1133,7 @@ def main(page: ft.Page):
         score_text.value = f"Score: {board.score}"
         timer_text.value = f"Tempo: {board.format_elapsed()}"
         status_text.value = board.status_message
-        intro_status.value = board.status_message
+        intro_status.value = ""
         try:
             score_text.update()
             timer_text.update()
@@ -1161,8 +1208,7 @@ def main(page: ft.Page):
 
     async def load_preferences_json(key):
         try:
-            preferences = ft.SharedPreferences()
-            raw_value = await preferences.get(key)
+            raw_value = await shared_prefs.get(key)
         except Exception:
             return None
         if not raw_value:
@@ -1174,8 +1220,7 @@ def main(page: ft.Page):
 
     async def save_preferences_json(key, payload):
         try:
-            preferences = ft.SharedPreferences()
-            await preferences.set(key, json.dumps(payload))
+            await shared_prefs.set(key, json.dumps(payload))
             return None
         except Exception as exc:
             return str(exc)
@@ -1339,6 +1384,11 @@ def main(page: ft.Page):
             render_route("/theme-studio")
             return
 
+        if not studio_image_bytes:
+            theme_studio_status.value = "Escolhe uma imagem para o verso da carta antes de guardar."
+            render_route("/theme-studio")
+            return
+
         try:
             created = save_custom_theme_bundle(
                 label=name_value,
@@ -1352,8 +1402,8 @@ def main(page: ft.Page):
                 board_bg_bytes=studio_board_bg_bytes,
                 board_bg_filename=studio_board_bg_name,
             )
-        except ValueError as exc:
-            theme_studio_status.value = str(exc)
+        except Exception as exc:
+            theme_studio_status.value = f"Erro ao guardar: {exc}"
             render_route("/theme-studio")
             return
 
@@ -2194,13 +2244,15 @@ def main(page: ft.Page):
 
     # --- view builders ---
 
-    def build_intro_view():
+    def _build_intro_view_legacy():
         """
         Monta a home da aplicacao com acessos a continuar, novo jogo e visual.
         """
         theme = effective_theme()
+        hero_min_height = max(620, int(page.height or 780) - 28) if is_narrow() else None
         hero = ft.Container(
             width=panel_width(),
+            height=hero_min_height,
             padding=24 if is_narrow() else 30,
             border_radius=ft.BorderRadius.all(32),
             gradient=ft.LinearGradient(
@@ -2210,6 +2262,8 @@ def main(page: ft.Page):
             ),
             shadow=make_shadow(),
             content=ft.Column(
+                expand=is_narrow(),
+                alignment=ft.MainAxisAlignment.CENTER if is_narrow() else ft.MainAxisAlignment.START,
                 controls=[
                     ft.Container(
                         padding=ft.Padding.symmetric(horizontal=12, vertical=8),
@@ -2267,21 +2321,475 @@ Ou começa um jogo novo!''',
                         ),
                     ),
                 ],
-                spacing=16,
-                tight=True,
+                spacing=18 if is_narrow() else 16,
+                tight=not is_narrow(),
             ),
         )
         return ft.Column(
             expand=True,
+            alignment=ft.MainAxisAlignment.CENTER if is_narrow() else ft.MainAxisAlignment.START,
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Column(
                     expand=True,
+                    alignment=ft.MainAxisAlignment.CENTER if is_narrow() else ft.MainAxisAlignment.START,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[hero],
                     spacing=16,
                 )
             ],
+        )
+
+    def build_intro_view():
+        """
+        Monta a home da aplicacao com acessos a continuar, novo jogo e visual.
+
+        A tela foi desenhada para caber inteira no ecra vertical do telemovel
+        sem scroll e para refletir visualmente o tema ativo do utilizador.
+        """
+        theme = effective_theme()
+        board_state = effective_board_state(use_draft=False)
+        back_data = BACK_OPTIONS.get(settings.card_back_name, {})
+        narrow = is_narrow()
+        accent_glow = (
+            f"#33{theme['accent'][1:]}" if theme["accent"].startswith("#") else "#33FFFFFF"
+        )
+        accent_chip_bg = (
+            f"#26{theme['accent'][1:]}" if theme["accent"].startswith("#") else "#26FFFFFF"
+        )
+        fit_lookup = {
+            "cover": ft.BoxFit.COVER,
+            "contain": ft.BoxFit.CONTAIN,
+            "fill": ft.BoxFit.FILL,
+        }
+        preview_back_fit = fit_lookup.get(
+            str(back_data.get("fit", "cover")).lower(),
+            ft.BoxFit.COVER,
+        )
+        active_back_src = (
+            back_data.get("asset")
+            or settings.card_back
+            or BACK_OPTIONS["classic"]["asset"]
+        )
+        preview_face_cards = [
+            "images/Ace_clubs.svg",
+            "images/Ace_hearts.svg",
+            "images/Ace_diamonds.svg",
+        ]
+
+        def preview_card_shell(width, height, content, bgcolor="#FFFFFFFF", badge=None, radius=18):
+            card_layers = [
+                ft.Container(
+                    left=0,
+                    right=0,
+                    top=0,
+                    bottom=0,
+                    alignment=ft.Alignment.CENTER,
+                    content=content,
+                )
+            ]
+            if badge is not None:
+                card_layers.append(
+                    ft.Container(
+                        left=10,
+                        right=10,
+                        bottom=10,
+                        content=badge,
+                    )
+                )
+            return ft.Container(
+                width=width,
+                height=height,
+                border_radius=ft.BorderRadius.all(radius),
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                bgcolor=bgcolor,
+                border=ft.Border.all(1, "#30FFFFFF"),
+                shadow=ft.BoxShadow(
+                    blur_radius=24,
+                    spread_radius=0,
+                    color="#44000000",
+                    offset=ft.Offset(0, 12),
+                ),
+                content=ft.Stack(
+                    expand=True,
+                    controls=card_layers,
+                ),
+            )
+
+        def preview_image_card(
+            src,
+            width,
+            height,
+            fit=ft.BoxFit.COVER,
+            bgcolor="#FFFFFFFF",
+            badge=None,
+            radius=18,
+        ):
+            return preview_card_shell(
+                width=width,
+                height=height,
+                bgcolor=bgcolor,
+                badge=badge,
+                radius=radius,
+                content=ft.Image(
+                    src=src,
+                    width=width,
+                    height=height,
+                    fit=fit,
+                ),
+            )
+
+        preview_stage = ft.Container(
+            height=154 if narrow else 232,
+            on_click=open_config_from_intro,
+            ink=True,
+            border_radius=ft.BorderRadius.all(30),
+            clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+            border=ft.Border.all(1.2, "#28FFFFFF"),
+            bgcolor=board_state["color"],
+            image=(
+                ft.DecorationImage(
+                    src=board_state["image"],
+                    fit=ft.BoxFit.COVER,
+                    opacity=0.94,
+                )
+                if board_state["image"]
+                else None
+            ),
+            content=ft.Stack(
+                expand=True,
+                controls=[
+                    ft.Container(
+                        expand=True,
+                        gradient=ft.LinearGradient(
+                            begin=ft.Alignment(-0.5, -1),
+                            end=ft.Alignment(0.4, 1),
+                            colors=["#00000000", "#18000000", "#6C07110C"],
+                        ),
+                    ),
+                    ft.Container(
+                        left=-36,
+                        top=-52,
+                        width=136,
+                        height=136,
+                        border_radius=ft.BorderRadius.all(999),
+                        bgcolor=accent_glow,
+                    ),
+                    ft.Container(
+                        right=-30,
+                        bottom=-46,
+                        width=172,
+                        height=172,
+                        border_radius=ft.BorderRadius.all(999),
+                        bgcolor="#22FFFFFF",
+                    ),
+                    ft.Container(
+                        left=12,
+                        right=12,
+                        top=12,
+                        content=ft.Row(
+                            alignment=ft.MainAxisAlignment.END,
+                            controls=[
+                                ft.Row(
+                                    spacing=6,
+                                    controls=[
+                                        preview_image_card(
+                                            face_src,
+                                            30 if narrow else 38,
+                                            42 if narrow else 54,
+                                            fit=ft.BoxFit.CONTAIN,
+                                            bgcolor="#FFFDF8F1",
+                                            radius=8,
+                                        )
+                                        for face_src in preview_face_cards
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ),
+                    ft.Container(
+                        left=18,
+                        bottom=14 if narrow else 18,
+                        content=preview_image_card(
+                            active_back_src,
+                            64 if narrow else 88,
+                            92 if narrow else 124,
+                            fit=preview_back_fit,
+                            bgcolor=theme["panel_bg_alt"],
+                        ),
+                    ),
+                    ft.Container(
+                        left=82 if narrow else 122,
+                        bottom=24 if narrow else 30,
+                        scale=0.98,
+                        content=preview_image_card(
+                            active_back_src,
+                            76 if narrow else 104,
+                            108 if narrow else 144,
+                            fit=preview_back_fit,
+                            bgcolor=theme["panel_bg_alt"],
+                        ),
+                    ),
+                    ft.Container(
+                        right=18,
+                        bottom=14 if narrow else 22,
+                        scale=0.94,
+                        content=preview_image_card(
+                            active_back_src,
+                            68 if narrow else 94,
+                            96 if narrow else 130,
+                            fit=preview_back_fit,
+                            bgcolor=theme["panel_bg_alt"],
+                        ),
+                    ),
+                    ft.Container(
+                        left=12,
+                        right=12,
+                        bottom=12,
+                        padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+                        border_radius=ft.BorderRadius.all(999),
+                        bgcolor="#96000000",
+                        content=ft.Row(
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            controls=[
+                                ft.Row(
+                                    spacing=6,
+                                    tight=True,
+                                    controls=[
+                                        ft.Icon(
+                                            ft.Icons.WALLPAPER,
+                                            size=15,
+                                            color=theme["accent"],
+                                        ),
+                                        ft.Text(
+                                            board_state["label"],
+                                            size=11,
+                                            weight=ft.FontWeight.W_600,
+                                            color=theme["text"],
+                                            max_lines=1,
+                                            overflow=ft.TextOverflow.ELLIPSIS,
+                                        ),
+                                    ],
+                                ),
+                                ft.Container(
+                                    padding=ft.Padding.symmetric(horizontal=10, vertical=8),
+                                    border_radius=ft.BorderRadius.all(999),
+                                    bgcolor=accent_chip_bg,
+                                    content=ft.Row(
+                                        spacing=6,
+                                        tight=True,
+                                        controls=[
+                                            ft.Icon(
+                                                ft.Icons.GRID_ON,
+                                                size=16,
+                                                color=theme["accent"],
+                                            ),
+                                            ft.Text(
+                                                "Mesa pronta",
+                                                size=11,
+                                                weight=ft.FontWeight.W_600,
+                                                color=theme["text"],
+                                            ),
+                                            ft.Icon(
+                                                ft.Icons.CHEVRON_RIGHT,
+                                                size=15,
+                                                color=theme["accent"],
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                ],
+            ),
+        )
+
+        headline_block = ft.Column(
+            spacing=10 if narrow else 12,
+            tight=True,
+            controls=[
+                ft.Container(
+                    padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+                    border_radius=ft.BorderRadius.all(999),
+                    bgcolor="#22FFFFFF",
+                    content=ft.Text(
+                        "Bem-vindo ao",
+                        size=16 if narrow else 18,
+                        weight=ft.FontWeight.BOLD,
+                        color=theme["text"],
+                    ),
+                ),
+                ft.Text(
+                    "Paciência Online xTREME",
+                    size=30 if narrow else 40,
+                    weight=ft.FontWeight.BOLD,
+                    color=theme["text"],
+                ),
+                ft.Text(
+'''Ajusta o visual do ecrã,
+Retoma a partida atual,
+Ou começa um jogo novo!''',
+                    size=13 if narrow else 14,
+                    color=theme["muted"],
+                ),
+            ],
+        )
+
+        def intro_action_button(label, hint, icon, on_click, filled):
+            text_color = theme["page_bg"] if filled else theme["text"]
+            subtitle_color = "#2C2411" if filled else theme["muted"]
+            return ft.Container(
+                on_click=on_click,
+                width=panel_width(980),
+                padding=ft.Padding.symmetric(horizontal=16, vertical=15),
+                border_radius=ft.BorderRadius.all(24),
+                bgcolor=theme["accent"] if filled else "#16FFFFFF",
+                border=ft.Border.all(
+                    1.3,
+                    theme["accent"] if filled else "#26FFFFFF",
+                ),
+                shadow=ft.BoxShadow(
+                    blur_radius=22 if filled else 16,
+                    color="#44000000",
+                    offset=ft.Offset(0, 10),
+                ),
+                content=ft.Row(
+                    controls=[
+                        ft.Container(
+                            width=42,
+                            height=42,
+                            border_radius=ft.BorderRadius.all(14),
+                            bgcolor="#22FFFFFF" if filled else accent_chip_bg,
+                            alignment=ft.Alignment.CENTER,
+                            content=ft.Icon(
+                                icon,
+                                size=20,
+                                color=theme["page_bg"] if filled else theme["accent"],
+                            ),
+                        ),
+                        ft.Column(
+                            expand=True,
+                            spacing=2,
+                            tight=True,
+                            controls=[
+                                ft.Text(
+                                    label,
+                                    size=16,
+                                    weight=ft.FontWeight.W_600,
+                                    color=text_color,
+                                ),
+                                ft.Text(
+                                    hint,
+                                    size=12,
+                                    color=subtitle_color,
+                                ),
+                            ],
+                        ),
+                        ft.Icon(
+                            ft.Icons.ARROW_FORWARD_ROUNDED,
+                            size=20,
+                            color=theme["page_bg"] if filled else theme["accent"],
+                        ),
+                    ],
+                    spacing=12,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            )
+
+        action_group = ft.Column(
+            spacing=10,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                intro_action_button(
+                    "Continuar jogo em andamento",
+                    "Retoma a mesa exatamente como ficou.",
+                    ft.Icons.PLAY_ARROW,
+                    continue_current_game,
+                    True,
+                ),
+                intro_action_button(
+                    "Começar nova partida",
+                    "Cria um novo baralho e inicia outra ronda.",
+                    ft.Icons.CASINO,
+                    start_new_game_from_intro,
+                    False,
+                ),
+            ],
+        )
+
+        hero = ft.Container(
+            expand=True,
+            width=panel_width(980),
+            padding=ft.Padding.symmetric(
+                horizontal=18 if narrow else 30,
+                vertical=18 if narrow else 28,
+            ),
+            border_radius=ft.BorderRadius.all(34),
+            gradient=ft.LinearGradient(
+                begin=ft.Alignment(-1, -1),
+                end=ft.Alignment(1, 1),
+                colors=[theme["panel_bg_alt"], theme["board_bg"]],
+            ),
+            border=ft.Border.all(1.2, "#1FFFFFFF"),
+            shadow=make_shadow(),
+            content=ft.Stack(
+                expand=True,
+                controls=[
+                    ft.Container(
+                        left=-70,
+                        top=-96,
+                        width=220,
+                        height=220,
+                        border_radius=ft.BorderRadius.all(999),
+                        bgcolor=accent_glow,
+                    ),
+                    ft.Container(
+                        right=-64,
+                        bottom=-112,
+                        width=240,
+                        height=240,
+                        border_radius=ft.BorderRadius.all(999),
+                        bgcolor="#16FFFFFF",
+                    ),
+                    ft.Column(
+                        expand=True,
+                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        controls=[
+                            ft.Column(
+                                spacing=12 if narrow else 16,
+                                tight=True,
+                                controls=[
+                                    headline_block,
+                                    action_group,
+                                    preview_stage,
+                                ],
+                            ),
+                            ft.Column(
+                                spacing=10 if narrow else 12,
+                                tight=True,
+                                controls=[
+                                    *(
+                                        [small_banner(intro_status, ft.Icons.INFO_OUTLINE)]
+                                        if should_show_intro_status()
+                                        else []
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        )
+        return ft.Container(
+            expand=True,
+            content=ft.Column(
+                expand=True,
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[hero],
+            ),
         )
 
     def build_theme_studio_view():
@@ -2318,11 +2826,11 @@ Ou começa um jogo novo!''',
                     border=ft.Border.all(1.2, palette["slot_border"]),
                     clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
                     content=ft.Image(
-                        src=preview_src,
                         fit=ft.BoxFit.COVER,
                         scale=preview_scale,
                         width=64,
                         height=92,
+                        **image_source_kwargs(preview_src),
                     ),
                 )
             ],
@@ -2396,8 +2904,8 @@ Ou começa um jogo novo!''',
                                     padding=16,
                                     border_radius=ft.BorderRadius.all(20),
                                     bgcolor=palette["board_bg"],
-                                    image=ft.DecorationImage(
-                                        src=studio_board_bg_bytes,
+                                    image=build_decoration_image(
+                                        studio_board_bg_bytes,
                                         fit=ft.BoxFit.COVER,
                                         opacity=0.75,
                                     ) if studio_board_bg_bytes else None,
@@ -2458,9 +2966,9 @@ Ou começa um jogo novo!''',
             bgcolor=palette["board_bg"],
             alignment=ft.Alignment(0, 0),
             content=ft.Image(
-                src=studio_board_bg_bytes,
                 fit=ft.BoxFit.COVER,
                 width=120, height=76,
+                **image_source_kwargs(studio_board_bg_bytes),
             ) if studio_board_bg_bytes else ft.Icon(
                 ft.Icons.WALLPAPER, color=palette["muted"], size=28
             ),
@@ -3263,6 +3771,7 @@ Ou começa um jogo novo!''',
         """
         return ft.SafeArea(
             content=ft.Container(
+                expand=True,
                 padding=ft.Padding.only(bottom=12),
                 content=content,
             ),
@@ -3347,7 +3856,7 @@ Ou começa um jogo novo!''',
             ),
         )
 
-    def render_route(route: str):
+    def render_route(route: str, intro_view_builder=build_intro_view):
         """
         Reconstroi a pagina conforme a rota interna selecionada.
 
@@ -3356,7 +3865,7 @@ Ou começa um jogo novo!''',
                 Rota logica a apresentar.
         """
         page.controls.clear()
-        page.scroll = None if route == "/game" else ft.ScrollMode.AUTO
+        page.scroll = None if route in {"/game", "/intro", "/", ""} else ft.ScrollMode.AUTO
 
         if route == "/manage-themes":
             page.appbar = ft.AppBar(
@@ -3392,7 +3901,7 @@ Ou começa um jogo novo!''',
             board.display_waste(update=False)
         else:
             page.appbar = None
-            page.add(safe_page(build_intro_view()))
+            page.add(safe_page(intro_view_builder()))
 
         apply_page_theme()
         page.update()

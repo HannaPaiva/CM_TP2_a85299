@@ -1,23 +1,7 @@
 {
   "themes": {
-    "tema_de_teste_xtreme": {
-      "label": "Tema De Teste Xtreme",
-      "page_bg": "#160718",
-      "header_bg": "#330918",
-      "panel_bg": "#3E0B1D",
-      "panel_bg_alt": "#521F32",
-      "board_bg": "#661E6B",
-      "board_bg_alt": "#541958",
-      "chip_bg": "#521440",
-      "slot_bg": "#78397D",
-      "slot_border": "#C9CA3F",
-      "text": "#F7F7F2",
-      "muted": "#CEBACC",
-      "accent": "#BDBE15",
-      "custom": true
-    },
     "classic_green_remix": {
-      "label": "Zaheen LOL",
+      "label": "Zaheenff",
       "page_bg": "#120718",
       "header_bg": "#0F0E23",
       "panel_bg": "#12112A",
@@ -32,35 +16,26 @@
       "accent": "#793E60",
       "custom": true
     },
-    "tema_paz": {
-      "label": "Tema Paz",
-      "page_bg": "#323033",
-      "header_bg": "#64646D",
-      "panel_bg": "#797984",
-      "panel_bg_alt": "#8E8E98",
-      "board_bg": "#E2DAE6",
-      "board_bg_alt": "#B9B3BD",
-      "chip_bg": "#ABA8B4",
-      "slot_bg": "#E5DEE9",
-      "slot_border": "#7B5E6F",
+    "zaheenff_remix": {
+      "label": "Zaheenff Remix",
+      "page_bg": "#250E30",
+      "header_bg": "#423EA6",
+      "panel_bg": "#504BC9",
+      "panel_bg_alt": "#645FDD",
+      "board_bg": "#A841DA",
+      "board_bg_alt": "#8A35B3",
+      "chip_bg": "#794ADA",
+      "slot_bg": "#B258DE",
+      "slot_border": "#FFE6F4",
       "text": "#152016",
-      "muted": "#5F6361",
-      "accent": "#5E3B4F",
+      "muted": "#4A2C5D",
+      "accent": "#FFE1F2",
       "custom": true
     }
   },
   "backs": {
-    "tema_de_teste_xtreme": {
-      "label": "Tema De Teste Xtreme",
-      "asset": "backs/custom/tema_de_teste_xtreme.jpg",
-      "suggested_theme": "tema_de_teste_xtreme",
-      "fit": "cover",
-      "scale": 1.05,
-      "board_bg": null,
-      "custom": true
-    },
     "classic_green_remix": {
-      "label": "Zaheen LOL",
+      "label": "Zaheenff",
       "asset": "backs/custom/classic_green_remix.jpg",
       "suggested_theme": "classic_green_remix",
       "fit": "cover",
@@ -68,13 +43,13 @@
       "board_bg": "boards/classic_green_remix_board.jpg",
       "custom": true
     },
-    "tema_paz": {
-      "label": "Tema Paz",
-      "asset": "backs/custom/tema_paz.jpg",
-      "suggested_theme": "tema_paz",
+    "zaheenff_remix": {
+      "label": "Zaheenff Remix",
+      "asset": "backs/custom/zaheenff_remix.jpg",
+      "suggested_theme": "zaheenff_remix",
       "fit": "cover",
       "scale": 1.0,
-      "board_bg": "boards/tema_paz_board.jpg",
+      "board_bg": "boards/zaheenff_remix_board.jpg",
       "custom": true
     }
   },
