@@ -33,7 +33,7 @@ def main(page: ft.Page):
     score_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
     timer_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
     passes_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
-    status_text = ft.Text(size=14)
+    status_text = ft.Text(size=14, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
     intro_status = ft.Text(size=13)
 
     # --- layout helpers ---
@@ -159,6 +159,35 @@ def main(page: ft.Page):
             ),
         )
 
+    def game_metric_chip(text_control, icon):
+        theme = settings.theme
+        return ft.Row(
+            controls=[
+                ft.Icon(icon, size=16, color=theme["accent"]),
+                text_control,
+            ],
+            spacing=6,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            tight=True,
+        )
+
+    def game_action_button(icon, tooltip, on_click):
+        theme = settings.theme
+        return ft.Container(
+            width=44 if is_narrow() else 48,
+            height=44 if is_narrow() else 48,
+            border_radius=ft.BorderRadius.all(14),
+            bgcolor=theme["panel_bg_alt"],
+            border=ft.Border.all(1, theme["slot_border"]),
+            content=ft.IconButton(
+                icon=icon,
+                tooltip=tooltip,
+                on_click=on_click,
+                icon_color=theme["text"],
+                icon_size=19 if is_narrow() else 20,
+            ),
+        )
+
     def surface_card(title, subtitle, content, icon):
         theme = settings.theme
         header = ft.Row(
@@ -281,7 +310,25 @@ def main(page: ft.Page):
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.setup()
 
-    board_frame = ft.Container(content=board, bgcolor=settings.theme["board_bg"], padding=12)
+    board_frame = ft.Container(
+        content=board,
+        bgcolor=settings.theme["board_bg"],
+        padding=ft.Padding.symmetric(horizontal=2, vertical=4),
+        alignment=ft.Alignment.TOP_CENTER,
+        expand=True,
+    )
+    game_status_banner = ft.Container(
+        padding=ft.Padding.symmetric(horizontal=14, vertical=10),
+        border_radius=ft.BorderRadius.all(18),
+        content=ft.Row(
+            controls=[
+                ft.Icon(ft.Icons.INFO_OUTLINE, size=16),
+                status_text,
+            ],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        ),
+    )
 
     def navigate(route: str):
         page.route = route
@@ -458,10 +505,20 @@ def main(page: ft.Page):
 
     def apply_page_theme():
         theme = settings.theme
-        page.padding = page_padding()
+        page.padding = 0 if page.route == "/game" else page_padding()
         page.bgcolor = theme["page_bg"]
         board_frame.bgcolor = theme["board_bg"]
+        board_frame.padding = ft.Padding.symmetric(
+            horizontal=2 if is_narrow() else 12,
+            vertical=4 if is_narrow() else 12,
+        )
         status_text.color = theme["text"]
+        game_status_banner.bgcolor = theme["panel_bg"]
+        game_status_banner.border = ft.Border.all(1.2, theme["slot_border"])
+        if isinstance(game_status_banner.content, ft.Row):
+            for control in game_status_banner.content.controls:
+                if isinstance(control, ft.Icon):
+                    control.color = theme["accent"]
         intro_status.color = theme["text"]
 
         for text in (score_text, timer_text, passes_text):
@@ -930,8 +987,63 @@ def main(page: ft.Page):
             expand=True,
         )
 
+    def build_game_view():
+        bottom_padding = 8 if is_narrow() else 14
+        side_padding = 6 if is_narrow() else page_padding()
+        header = ft.Column(
+            spacing=6,
+            tight=True,
+            controls=[
+                ft.Container(
+                    padding=ft.Padding.symmetric(horizontal=2, vertical=2),
+                    content=ft.Row(
+                        controls=[
+                            game_metric_chip(score_text, ft.Icons.STARS),
+                            ft.Container(expand=True),
+                            game_metric_chip(timer_text, ft.Icons.SCHEDULE),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                ),
+                ft.Row(
+                    wrap=True,
+                    spacing=8,
+                    run_spacing=8,
+                    controls=[
+                        game_action_button(ft.Icons.HOME, "Intro", show_intro),
+                        game_action_button(ft.Icons.SETTINGS, "Configuracao", open_config_from_game),
+                        game_action_button(ft.Icons.CASINO, "Novo jogo", new_game),
+                        game_action_button(ft.Icons.RESTART_ALT, "Reiniciar", restart),
+                        game_action_button(ft.Icons.UNDO, "Desfazer", undo),
+                    ],
+                ),
+            ],
+        )
+        return ft.SafeArea(
+            expand=True,
+            maintain_bottom_view_padding=True,
+            minimum_padding=ft.Padding.only(bottom=bottom_padding),
+            content=ft.Container(
+                expand=True,
+                padding=ft.Padding.only(left=side_padding, right=side_padding, top=6, bottom=bottom_padding),
+                content=ft.Column(
+                    expand=True,
+                    spacing=6,
+                    controls=[
+                        header,
+                        ft.Container(
+                            expand=True,
+                            content=board_frame,
+                        ),
+                    ],
+                ),
+            ),
+        )
+
     def render_route(route: str):
         page.controls.clear()
+        page.scroll = ft.ScrollMode.HIDDEN if route == "/game" else ft.ScrollMode.AUTO
 
         if route == "/config":
             page.appbar = ft.AppBar(
@@ -952,50 +1064,10 @@ def main(page: ft.Page):
             )
             page.add(safe_page(build_mode_view()))
         elif route == "/game":
-            page.appbar = ft.AppBar(
-                title=ft.Text("Solitaire Atelier"),
-                actions=[
-                    score_text,
-                    timer_text,
-                    passes_text,
-                    ft.IconButton(
-                        icon=ft.Icons.HOME,
-                        tooltip="Intro",
-                        on_click=show_intro,
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.SETTINGS,
-                        tooltip="Configuracao",
-                        on_click=open_config_from_game,
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.CASINO,
-                        tooltip="Novo jogo",
-                        on_click=new_game,
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.RESTART_ALT,
-                        tooltip="Reiniciar",
-                        on_click=restart,
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.UNDO,
-                        tooltip="Desfazer",
-                        on_click=undo,
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.SAVE_ALT,
-                        tooltip="Guardar",
-                        on_click=save_clicked,
-                    ),
-                    ft.IconButton(
-                        icon=ft.Icons.DOWNLOAD,
-                        tooltip="Carregar",
-                        on_click=load_clicked,
-                    ),
-                ],
-            )
-            page.add(board_frame, status_text)
+            page.appbar = None
+            page.add(build_game_view())
+            board.apply_visual_preferences(update=False)
+            board.display_waste(update=False)
         else:
             page.appbar = None
             page.add(safe_page(build_intro_view()))

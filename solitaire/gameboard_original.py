@@ -402,6 +402,7 @@ class GameBoard(ft.Stack):
 
     def apply_visual_preferences(self, update=True):
         page_w = max(300, int(self.app_page.width or 700))
+        page_h = max(560, int(self.app_page.height or 900))
         avail = max(280, page_w - 48)
 
         if avail >= 700:
@@ -413,13 +414,28 @@ class GameBoard(ft.Stack):
             self.width = 1000
             self.height = 500
         else:
+            if page_w < 480:
+                avail = max(320, page_w - 20)
+                width_factor = 0.95
+                offset_factor = 0.18
+                gap_factor = 0.16
+                min_card_width = 38
+            else:
+                avail = max(300, page_w - 32)
+                width_factor = 0.90
+                offset_factor = 0.20
+                gap_factor = 0.12
+                min_card_width = 32
             col_unit = avail / 7
-            self.card_width = max(28, int(col_unit * 0.86))
+            self.card_width = max(min_card_width, int(col_unit * width_factor))
             self.card_height = int(self.card_width * 10 / 7)
-            self.card_offset = max(10, int(col_unit * 0.20))
-            tableau_top = self.card_height + max(8, int(self.card_height * 0.12))
+            self.card_offset = max(10, int(self.card_height * offset_factor))
+            tableau_top = self.card_height + max(8, int(self.card_height * gap_factor))
             self.width = avail
-            self.height = tableau_top + self.card_height + 14 * self.card_offset + 20
+            self.height = max(
+                tableau_top + self.card_height + 14 * self.card_offset + 20,
+                page_h - 180 if page_w < 480 else 420,
+            )
 
         self.stock.left = 0
         self.stock.top = 0
