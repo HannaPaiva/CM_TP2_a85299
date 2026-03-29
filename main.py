@@ -63,10 +63,21 @@ def main(page: ft.Page):
             offset=ft.Offset(0, 10),
         )
 
+    def effective_theme_name():
+        route = page.route or "/intro"
+        if route == "/config" and draft_theme_name in THEME_OPTIONS:
+            return draft_theme_name
+        if settings.theme_name in THEME_OPTIONS:
+            return settings.theme_name
+        return "classic"
+
+    def effective_theme():
+        return THEME_OPTIONS[effective_theme_name()]
+
     # --- widget helpers ---
 
     def compact_info(label, value, icon, on_click=None, hint=None):
-        theme = settings.theme
+        theme = effective_theme()
         return ft.Container(
             on_click=on_click,
             padding=14,
@@ -110,7 +121,7 @@ def main(page: ft.Page):
         )
 
     def action_chip(label, icon, on_click, tone="soft"):
-        theme = settings.theme
+        theme = effective_theme()
         filled = tone == "filled"
         return ft.Container(
             on_click=on_click,
@@ -142,7 +153,7 @@ def main(page: ft.Page):
         )
 
     def small_banner(text_control, icon):
-        theme = settings.theme
+        theme = effective_theme()
         return ft.Container(
             width=panel_width(960),
             padding=16,
@@ -160,7 +171,7 @@ def main(page: ft.Page):
         )
 
     def game_metric_chip(text_control, icon):
-        theme = settings.theme
+        theme = effective_theme()
         return ft.Row(
             controls=[
                 ft.Icon(icon, size=16, color=theme["accent"]),
@@ -172,7 +183,7 @@ def main(page: ft.Page):
         )
 
     def game_action_button(icon, tooltip, on_click):
-        theme = settings.theme
+        theme = effective_theme()
         return ft.Container(
             width=44 if is_narrow() else 48,
             height=44 if is_narrow() else 48,
@@ -189,7 +200,7 @@ def main(page: ft.Page):
         )
 
     def surface_card(title, subtitle, content, icon):
-        theme = settings.theme
+        theme = effective_theme()
         header = ft.Row(
             controls=[
                 ft.Container(
@@ -228,7 +239,7 @@ def main(page: ft.Page):
         )
 
     def option_tile(title, subtitle, selected, icon, on_click, data=None, media=None):
-        theme = settings.theme
+        theme = effective_theme()
         title_color = theme["page_bg"] if selected else theme["text"]
         subtitle_color = theme["page_bg"] if selected else theme["muted"]
         icon_color = theme["page_bg"] if selected else theme["accent"]
@@ -310,7 +321,7 @@ def main(page: ft.Page):
 
     board_frame = ft.Container(
         content=board,
-        bgcolor=settings.theme["board_bg"],
+        bgcolor=effective_theme()["board_bg"],
         padding=ft.Padding.symmetric(horizontal=2, vertical=4),
         alignment=ft.Alignment.TOP_CENTER,
         expand=True,
@@ -536,7 +547,7 @@ def main(page: ft.Page):
         board.set_status("Visual atualizado.")
 
     def apply_page_theme():
-        theme = settings.theme
+        theme = effective_theme()
         page.padding = 0 if page.route == "/game" else page_padding()
         page.bgcolor = theme["page_bg"]
         board_frame.bgcolor = theme["board_bg"]
@@ -569,7 +580,7 @@ def main(page: ft.Page):
     # --- view builders ---
 
     def build_intro_view():
-        theme = settings.theme
+        theme = effective_theme()
         hero = ft.Container(
             width=panel_width(),
             padding=24 if is_narrow() else 30,
@@ -722,7 +733,7 @@ def main(page: ft.Page):
 
     def build_card_back_tile(back_name, data):
         selected = back_name == draft_card_back_name
-        theme = settings.theme
+        theme = effective_theme()
         border_color = theme["accent"] if selected else theme["slot_border"]
         bg_color = theme["panel_bg_alt"]
         preview = ft.Container(
@@ -780,7 +791,7 @@ def main(page: ft.Page):
 
     def build_theme_tile(theme_name, data):
         selected = theme_name == draft_theme_name
-        theme = settings.theme
+        theme = effective_theme()
         border_color = theme["accent"] if selected else theme["slot_border"]
         swatch = ft.Container(
             width=52,
@@ -840,7 +851,7 @@ def main(page: ft.Page):
 
     def build_preset_tile(preset):
         theme_data = THEME_OPTIONS[preset["theme"]]
-        cur_theme = settings.theme
+        cur_theme = effective_theme()
         selected = (
             draft_card_back_name == preset["back"]
             and draft_theme_name == preset["theme"]
@@ -902,7 +913,7 @@ def main(page: ft.Page):
         )
 
     def build_config_view():
-        theme = settings.theme
+        theme = effective_theme()
 
         back_tiles = ft.Column(
             controls=[
