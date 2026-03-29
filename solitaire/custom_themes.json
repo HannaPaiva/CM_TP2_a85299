@@ -40,7 +40,7 @@
       "suggested_theme": "tema_de_teste_xtreme",
       "fit": "cover",
       "scale": 1.05,
-      "board_bg": "boards/tema_de_teste_xtreme_board.jpg",
+      "board_bg": null,
       "custom": true
     },
     "classic_green_remix": {

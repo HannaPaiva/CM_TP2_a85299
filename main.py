@@ -123,9 +123,7 @@ def main(page: ft.Page):
 
     file_picker = ft.FilePicker()
     page.services.append(file_picker)
-
-    board_file_picker = ft.FilePicker()
-    page.services.append(board_file_picker)
+    file_picker_busy = False
 
     # Color picker state
     picker_target = None   # "base"|"surface"|"accent"|("edit", theme_name, color_key)
@@ -403,6 +401,50 @@ def main(page: ft.Page):
         settings.board_bg_target = board_target
         draft_board_bg_style = board_style
         draft_board_bg_target = board_target
+
+    def should_show_intro_status():
+        return intro_status.value not in {"", "Pronto para jogar.", "Partida anterior carregada."}
+
+    async def pick_single_image(dialog_title, on_error=None):
+        nonlocal file_picker_busy
+        if file_picker_busy:
+            return None
+
+        file_picker_busy = True
+        try:
+            files = await file_picker.pick_files(
+                dialog_title=dialog_title,
+                file_type=ft.FilePickerFileType.IMAGE,
+                allow_multiple=False,
+                with_data=True,
+            )
+        except RuntimeError as exc:
+            if on_error is not None:
+                error_text = str(exc).lower()
+                if "timeout" in error_text:
+                    on_error("O seletor de ficheiros expirou. Tenta novamente.")
+                else:
+                    on_error("Nao foi possivel abrir o seletor de ficheiros.")
+            return None
+        finally:
+            file_picker_busy = False
+
+        if not files:
+            return None
+
+        selected_file = files[0]
+        selected_bytes = selected_file.bytes
+        if selected_bytes is None and selected_file.path:
+            selected_bytes = Path(selected_file.path).read_bytes()
+        if not selected_bytes:
+            if on_error is not None:
+                on_error("Nao foi possivel ler a imagem escolhida.")
+            return None
+
+        return {
+            "name": selected_file.name,
+            "bytes": selected_bytes,
+        }
 
     # --- widget helpers ---
 
@@ -918,22 +960,17 @@ def main(page: ft.Page):
     # Studio board bg (picked while creating a new theme)
     async def _pick_studio_board_bg_async():
         nonlocal studio_board_bg_bytes, studio_board_bg_name
-        files = await board_file_picker.pick_files(
-            dialog_title="Escolhe o fundo do tabuleiro",
-            file_type=ft.FilePickerFileType.IMAGE,
-            allow_multiple=False,
-            with_data=True,
+        selected = await pick_single_image(
+            "Escolhe o fundo do tabuleiro",
+            on_error=lambda message: (
+                setattr(theme_studio_status, "value", message),
+                render_route("/theme-studio"),
+            ),
         )
-        if not files:
+        if selected is None:
             return
-        selected = files[0]
-        data = selected.bytes
-        if data is None and selected.path:
-            data = Path(selected.path).read_bytes()
-        if not data:
-            return
-        studio_board_bg_bytes = data
-        studio_board_bg_name = selected.name
+        studio_board_bg_bytes = selected["bytes"]
+        studio_board_bg_name = selected["name"]
         theme_studio_status.value = f"Fundo '{studio_board_bg_name}' carregado."
         render_route("/theme-studio")
 
@@ -949,21 +986,10 @@ def main(page: ft.Page):
     # Per-theme board bg management (from manage-themes view)
     def _choose_board_bg_for_theme(theme_name):
         async def _pick():
-            files = await board_file_picker.pick_files(
-                dialog_title="Fundo do tabuleiro para este tema",
-                file_type=ft.FilePickerFileType.IMAGE,
-                allow_multiple=False,
-                with_data=True,
-            )
-            if not files:
+            selected = await pick_single_image("Fundo do tabuleiro para este tema")
+            if selected is None:
                 return
-            selected = files[0]
-            data = selected.bytes
-            if data is None and selected.path:
-                data = Path(selected.path).read_bytes()
-            if not data:
-                return
-            update_custom_theme_board_bg(theme_name, data, selected.name)
+            update_custom_theme_board_bg(theme_name, selected["bytes"], selected["name"])
             refresh_custom_theme_registry()
             apply_page_theme()
             render_route("/manage-themes")
@@ -1150,7 +1176,7 @@ def main(page: ft.Page):
         studio_image_name = None
         studio_board_bg_bytes = None
         studio_board_bg_name = None
-        theme_studio_status.value = "Cria uma paleta, faz upload do verso e guarda o tema no projeto."
+        theme_studio_status.value = "Cria uma paleta, faz upload do verso, etc."
         navigate("/theme-studio")
 
     def preview_theme_studio(e=None):
@@ -1159,26 +1185,18 @@ def main(page: ft.Page):
 
     async def pick_theme_studio_image_async():
         nonlocal studio_image_bytes, studio_image_name
-        files = await file_picker.pick_files(
-            dialog_title="Escolhe a imagem do verso da carta",
-            file_type=ft.FilePickerFileType.IMAGE,
-            allow_multiple=False,
-            with_data=True,
+        selected = await pick_single_image(
+            "Escolhe a imagem do verso da carta",
+            on_error=lambda message: (
+                setattr(theme_studio_status, "value", message),
+                render_route("/theme-studio"),
+            ),
         )
-        if not files:
+        if selected is None:
             return
 
-        selected_file = files[0]
-        selected_bytes = selected_file.bytes
-        if selected_bytes is None and selected_file.path:
-            selected_bytes = Path(selected_file.path).read_bytes()
-        if not selected_bytes:
-            theme_studio_status.value = "Nao foi possivel ler a imagem escolhida."
-            render_route("/theme-studio")
-            return
-
-        studio_image_bytes = selected_bytes
-        studio_image_name = selected_file.name
+        studio_image_bytes = selected["bytes"]
+        studio_image_name = selected["name"]
         theme_studio_status.value = f"Imagem '{studio_image_name}' pronta para o tema."
         render_route("/theme-studio")
 
@@ -1192,7 +1210,7 @@ def main(page: ft.Page):
         nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         name_value = (studio_name_field.value or "").strip()
         if len(name_value) < 3:
-            theme_studio_status.value = "Dá um nome com pelo menos 3 caracteres ao tema."
+            theme_studio_status.value = "Dá um nome ao tema."
             render_route("/theme-studio")
             return
 
@@ -1317,7 +1335,6 @@ def main(page: ft.Page):
             board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
             sync_settings_from_board()
             sync_board_visuals(update=False)
-            board.set_status("Partida anterior carregada.")
             render_route(page.route or "/intro")
             return
 
@@ -1437,18 +1454,18 @@ Ou começa um jogo novo!''',
                         size=14,
                         color=theme["muted"],
                     ),
-                    small_banner(intro_status, ft.Icons.INFO_OUTLINE),
+                    *([small_banner(intro_status, ft.Icons.INFO_OUTLINE)] if should_show_intro_status() else []),
                     ft.Row(
                         controls=[
                             action_chip(
-                                "Continuar",
+                                "Continuar jogo em andamento",
                                 ft.Icons.PLAY_ARROW,
                                 continue_current_game,
                                 tone="filled",
                                 large=True,
                             ),
                             action_chip(
-                                "Nova partida",
+                                "        Começar nova partida      ",
                                 ft.Icons.CASINO,
                                 start_new_game_from_intro,
                                 large=True,
@@ -1462,7 +1479,7 @@ Ou começa um jogo novo!''',
                         width=panel_width(),
                         content=compact_info(
                             "Visual e temas",
-                            f"{THEME_OPTIONS[settings.theme_name]['label']} + {BACK_OPTIONS[settings.card_back_name]['label']}",
+                            f"",
                             ft.Icons.PALETTE,
                             on_click=open_config_from_intro,
                             hint="Verso, paleta e fundo da mesa",
