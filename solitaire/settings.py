@@ -149,6 +149,8 @@ class Settings:
     game_mode: str = "classic"
     card_back_name: str = "classic"
     theme_name: str = "classic"
+    board_bg_style: str = "theme_color"
+    board_bg_target: str = ""
     waste_size: int = 1
     deck_passes_allowed: int = UNLIMITED_PASSES
 
@@ -183,6 +185,8 @@ class Settings:
             "game_mode": self.game_mode,
             "card_back_name": self.card_back_name,
             "theme_name": self.theme_name,
+            "board_bg_style": self.board_bg_style,
+            "board_bg_target": self.board_bg_target,
             "waste_size": self.waste_size,
             "deck_passes_allowed": self.deck_passes_allowed,
         }
@@ -196,6 +200,8 @@ class Settings:
                 data.get("card_back_name", data.get("card_back", "classic"))
             ),
             theme_name=str(data.get("theme_name", "classic")),
+            board_bg_style=str(data.get("board_bg_style", "theme_color")),
+            board_bg_target=str(data.get("board_bg_target", "")),
         )
 
         if settings.card_back_name not in BACK_OPTIONS:
@@ -204,6 +210,9 @@ class Settings:
             settings.theme_name = "classic"
         if settings.game_mode not in GAME_MODES:
             settings.game_mode = "classic"
+        if settings.board_bg_style not in {"theme_color", "preset_color", "image"}:
+            settings.board_bg_style = "theme_color"
+            settings.board_bg_target = ""
 
         return settings
 

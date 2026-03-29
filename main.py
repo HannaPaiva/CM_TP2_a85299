@@ -28,10 +28,38 @@ VISUAL_SETTINGS_KEY = "solitaire.visual_settings.v1"
 
 # Presets that pair a card back with its matching table theme
 VISUAL_PRESETS = [
-    {"label": "Classic Green", "back": "classic", "theme": "classic", "icon": ft.Icons.GRASS},
-    {"label": "Forest Moss",   "back": "forest",  "theme": "forest",  "icon": ft.Icons.PARK},
-    {"label": "Ocean Blue",    "back": "ocean",   "theme": "ocean",   "icon": ft.Icons.WAVES},
-    {"label": "Sunrise Copper","back": "sunrise", "theme": "sunrise", "icon": ft.Icons.WB_SUNNY},
+    {
+        "label": "Classic Green",
+        "back": "classic",
+        "theme": "classic",
+        "board_bg_style": "theme_color",
+        "board_bg_target": "",
+        "icon": ft.Icons.GRASS,
+    },
+    {
+        "label": "Forest Moss",
+        "back": "forest",
+        "theme": "forest",
+        "board_bg_style": "theme_color",
+        "board_bg_target": "",
+        "icon": ft.Icons.PARK,
+    },
+    {
+        "label": "Ocean Blue",
+        "back": "ocean",
+        "theme": "ocean",
+        "board_bg_style": "theme_color",
+        "board_bg_target": "",
+        "icon": ft.Icons.WAVES,
+    },
+    {
+        "label": "Sunrise Copper",
+        "back": "sunrise",
+        "theme": "sunrise",
+        "board_bg_style": "theme_color",
+        "board_bg_target": "",
+        "icon": ft.Icons.WB_SUNNY,
+    },
 ]
 
 
@@ -43,6 +71,9 @@ def main(page: ft.Page):
     config_return_route = "/intro"
     draft_card_back_name = settings.card_back_name
     draft_theme_name = settings.theme_name
+    draft_board_bg_style = settings.board_bg_style
+    draft_board_bg_target = settings.board_bg_target
+    config_theme_tab = "combo"
 
     page.title = "Paciência"
     page.scroll = ft.ScrollMode.AUTO
@@ -167,6 +198,64 @@ def main(page: ft.Page):
     def effective_theme():
         return THEME_OPTIONS[effective_theme_name()]
 
+    def normalize_board_bg_state(style, target):
+        style = str(style or "theme_color")
+        target = str(target or "")
+        if style == "image":
+            if target in BACK_OPTIONS and BACK_OPTIONS[target].get("board_bg"):
+                return style, target
+            return "theme_color", ""
+        if style == "preset_color":
+            if target in THEME_OPTIONS:
+                return style, target
+            return "theme_color", ""
+        return "theme_color", ""
+
+    def effective_board_state(use_draft=None):
+        if use_draft is None:
+            use_draft = (page.route or "/intro") == "/config"
+        theme_name = draft_theme_name if use_draft else settings.theme_name
+        board_style = draft_board_bg_style if use_draft else settings.board_bg_style
+        board_target = draft_board_bg_target if use_draft else settings.board_bg_target
+        board_style, board_target = normalize_board_bg_state(board_style, board_target)
+
+        theme_name = theme_name if theme_name in THEME_OPTIONS else "classic"
+        theme_data = THEME_OPTIONS[theme_name]
+
+        if board_style == "image":
+            back_data = BACK_OPTIONS.get(board_target, {})
+            image_path = back_data.get("board_bg")
+            if image_path:
+                return {
+                    "style": board_style,
+                    "target": board_target,
+                    "color": theme_data["board_bg"],
+                    "image": image_path,
+                    "label": back_data.get("label", board_target),
+                    "description": "Imagem de fundo do board",
+                }
+
+        if board_style == "preset_color":
+            preset_theme = THEME_OPTIONS.get(board_target)
+            if preset_theme is not None:
+                return {
+                    "style": board_style,
+                    "target": board_target,
+                    "color": preset_theme["board_bg"],
+                    "image": None,
+                    "label": preset_theme["label"],
+                    "description": "Cor fixa do board",
+                }
+
+        return {
+            "style": "theme_color",
+            "target": "",
+            "color": theme_data["board_bg"],
+            "image": None,
+            "label": theme_data["label"],
+            "description": "Cor do tema atual",
+        }
+
     def is_hex_color(value):
         value = str(value or "").strip().lstrip("#")
         return len(value) in (3, 6) and all(ch in "0123456789abcdefABCDEF" for ch in value)
@@ -204,15 +293,86 @@ def main(page: ft.Page):
                     "label": THEME_OPTIONS[theme_name]["label"],
                     "back": back_name,
                     "theme": theme_name,
+                    "board_bg_style": "image" if back_data.get("board_bg") else "theme_color",
+                    "board_bg_target": back_name if back_data.get("board_bg") else "",
                     "icon": ft.Icons.AUTO_FIX_HIGH,
                 }
             )
         return presets
 
+    def available_board_color_themes():
+        return [
+            name
+            for name, data in THEME_OPTIONS.items()
+            if not data.get("custom")
+        ]
+
+    def available_board_image_backs():
+        return [
+            name
+            for name, data in BACK_OPTIONS.items()
+            if data.get("board_bg")
+        ]
+
+    def build_visual_settings_payload():
+        board_state = effective_board_state(use_draft=False)
+        back_data = BACK_OPTIONS.get(settings.card_back_name, {})
+        return {
+            "version": 2,
+            "card_back_name": settings.card_back_name,
+            "theme_name": settings.theme_name,
+            "board_bg_style": settings.board_bg_style,
+            "board_bg_target": settings.board_bg_target,
+            "card_back": {
+                "label": back_data.get("label", settings.card_back_name),
+                "asset": back_data.get("asset"),
+                "fit": back_data.get("fit", "cover"),
+                "scale": back_data.get("scale", 1.0),
+            },
+            "theme_palette": dict(settings.theme),
+            "board_background": {
+                "style": board_state["style"],
+                "target": board_state["target"],
+                "label": board_state["label"],
+                "color": board_state["color"],
+                "image": board_state["image"],
+                "description": board_state["description"],
+            },
+        }
+
+    def restore_visual_settings_payload(data):
+        nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
+        back_name = str(data.get("card_back_name", "classic"))
+        theme_name = str(data.get("theme_name", "classic"))
+        board_bg_block = data.get("board_background", {}) if isinstance(data.get("board_background"), dict) else {}
+        board_style = data.get("board_bg_style", board_bg_block.get("style", "theme_color"))
+        board_target = data.get("board_bg_target", board_bg_block.get("target", ""))
+        board_style, board_target = normalize_board_bg_state(board_style, board_target)
+
+        if back_name in BACK_OPTIONS:
+            settings.card_back_name = back_name
+            draft_card_back_name = back_name
+        else:
+            settings.card_back_name = "classic"
+            draft_card_back_name = "classic"
+
+        if theme_name in THEME_OPTIONS:
+            settings.theme_name = theme_name
+            draft_theme_name = theme_name
+        else:
+            settings.theme_name = "classic"
+            draft_theme_name = "classic"
+
+        settings.board_bg_style = board_style
+        settings.board_bg_target = board_target
+        draft_board_bg_style = board_style
+        draft_board_bg_target = board_target
+
     # --- widget helpers ---
 
     def compact_info(label, value, icon, on_click=None, hint=None):
         theme = effective_theme()
+        board_state = effective_board_state()
         return ft.Container(
             on_click=on_click,
             padding=14,
@@ -669,15 +829,29 @@ def main(page: ft.Page):
         label = THEME_OPTIONS.get(theme_name, {}).get("label", theme_name)
 
         def _do_delete(e):
-            nonlocal draft_card_back_name, draft_theme_name
+            nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
             delete_custom_theme(theme_name)
             refresh_custom_theme_registry()
+            visuals_changed = False
             if settings.theme_name == theme_name:
                 settings.theme_name = "classic"
                 settings.card_back_name = "classic"
                 draft_card_back_name = "classic"
                 draft_theme_name = "classic"
+                visuals_changed = True
+            if settings.card_back_name == theme_name:
+                settings.card_back_name = "classic"
+                draft_card_back_name = "classic"
+                visuals_changed = True
+            if settings.board_bg_style == "image" and settings.board_bg_target == theme_name:
+                settings.board_bg_style = "theme_color"
+                settings.board_bg_target = ""
+                draft_board_bg_style = "theme_color"
+                draft_board_bg_target = ""
+                visuals_changed = True
+            if visuals_changed:
                 sync_board_visuals(update=False)
+                page.run_task(save_visual_settings_async)
             page.pop_dialog()
             render_route("/manage-themes")
 
@@ -700,8 +874,7 @@ def main(page: ft.Page):
     # ── Board background helpers (per-theme) ─────────────────────────────────
 
     def effective_board_bg():
-        """Return the board bg asset path for the active card back, or None."""
-        return BACK_OPTIONS.get(settings.card_back_name, {}).get("board_bg")
+        return effective_board_state(use_draft=False)["image"]
 
     # Studio board bg (picked while creating a new theme)
     async def _pick_studio_board_bg_async():
@@ -758,8 +931,15 @@ def main(page: ft.Page):
         page.run_task(_pick)
 
     def _clear_board_bg_for_theme(theme_name):
+        nonlocal draft_board_bg_style, draft_board_bg_target
         update_custom_theme_board_bg(theme_name, None, None)
         refresh_custom_theme_registry()
+        if settings.board_bg_style == "image" and settings.board_bg_target == theme_name:
+            settings.board_bg_style = "theme_color"
+            settings.board_bg_target = ""
+            draft_board_bg_style = "theme_color"
+            draft_board_bg_target = ""
+            page.run_task(save_visual_settings_async)
         apply_page_theme()
         render_route("/manage-themes")
 
@@ -793,7 +973,7 @@ def main(page: ft.Page):
 
     board_frame = ft.Container(
         content=board,
-        bgcolor=effective_theme()["board_bg"],
+        bgcolor=effective_board_state(use_draft=False)["color"],
         padding=ft.Padding.symmetric(horizontal=2, vertical=4),
         alignment=ft.Alignment.TOP_CENTER,
         expand=True,
@@ -839,10 +1019,7 @@ def main(page: ft.Page):
         page.run_task(autosave_current_state)
 
     async def save_visual_settings_async():
-        data = {
-            "card_back_name": settings.card_back_name,
-            "theme_name": settings.theme_name,
-        }
+        data = build_visual_settings_payload()
         try:
             preferences = ft.SharedPreferences()
             await preferences.set(VISUAL_SETTINGS_KEY, json.dumps(data))
@@ -867,17 +1044,23 @@ def main(page: ft.Page):
         navigate("/game")
 
     def open_config_from_intro(e=None):
-        nonlocal config_return_route, draft_card_back_name, draft_theme_name
+        nonlocal config_return_route, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target, config_theme_tab
         config_return_route = "/intro"
         draft_card_back_name = settings.card_back_name
         draft_theme_name = settings.theme_name
+        draft_board_bg_style = settings.board_bg_style
+        draft_board_bg_target = settings.board_bg_target
+        config_theme_tab = "combo"
         navigate("/config")
 
     def open_config_from_game(e=None):
-        nonlocal config_return_route, draft_card_back_name, draft_theme_name
+        nonlocal config_return_route, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target, config_theme_tab
         config_return_route = "/game"
         draft_card_back_name = settings.card_back_name
         draft_theme_name = settings.theme_name
+        draft_board_bg_style = settings.board_bg_style
+        draft_board_bg_target = settings.board_bg_target
+        config_theme_tab = "combo"
         navigate("/config")
 
     def open_mode_picker(e=None):
@@ -935,7 +1118,7 @@ def main(page: ft.Page):
     studio_light_text_switch.on_change = preview_theme_studio
 
     def save_theme_studio(e=None):
-        nonlocal draft_card_back_name, draft_theme_name
+        nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         name_value = (studio_name_field.value or "").strip()
         if len(name_value) < 3:
             theme_studio_status.value = "Dá um nome com pelo menos 3 caracteres ao tema."
@@ -977,6 +1160,8 @@ def main(page: ft.Page):
         refresh_custom_theme_registry()
         draft_card_back_name = created["back_name"]
         draft_theme_name = created["theme_name"]
+        draft_board_bg_style = "image" if created["back"].get("board_bg") else "theme_color"
+        draft_board_bg_target = created["back_name"] if created["back"].get("board_bg") else ""
         apply_visual_draft(refresh_route=False)
         theme_studio_status.value = f"Tema '{created['theme']['label']}' criado e aplicado."
         navigate("/intro")
@@ -989,8 +1174,15 @@ def main(page: ft.Page):
             navigate("/intro")
 
     def apply_visual_draft(refresh_route=True):
+        nonlocal draft_board_bg_style, draft_board_bg_target
         settings.card_back_name = draft_card_back_name
         settings.theme_name = draft_theme_name
+        settings.board_bg_style, settings.board_bg_target = normalize_board_bg_state(
+            draft_board_bg_style,
+            draft_board_bg_target,
+        )
+        draft_board_bg_style = settings.board_bg_style
+        draft_board_bg_target = settings.board_bg_target
         board.settings = settings
         sync_board_visuals(update=False)
         page.run_task(save_visual_settings_async)
@@ -1010,10 +1202,12 @@ def main(page: ft.Page):
             apply_visual_draft()
 
     def apply_preset(e):
-        nonlocal draft_card_back_name, draft_theme_name
+        nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         preset = e.control.data
         draft_card_back_name = preset["back"]
         draft_theme_name = preset["theme"]
+        draft_board_bg_style = preset.get("board_bg_style", "theme_color")
+        draft_board_bg_target = preset.get("board_bg_target", "")
         apply_visual_draft()
 
     async def save_game():
@@ -1040,7 +1234,7 @@ def main(page: ft.Page):
             board.set_status("Nao foi possivel guardar a partida.")
 
     async def load_game():
-        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name
+        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         snapshot = None
         try:
             snapshot = storage.load_game()
@@ -1065,6 +1259,8 @@ def main(page: ft.Page):
         selected_game_mode = settings.game_mode
         draft_card_back_name = settings.card_back_name
         draft_theme_name = settings.theme_name
+        draft_board_bg_style = settings.board_bg_style
+        draft_board_bg_target = settings.board_bg_target
         sync_board_visuals(update=False)
         render_route(page.route or "/intro")
         board.set_status("Partida carregada.")
@@ -1076,8 +1272,23 @@ def main(page: ft.Page):
             show_game()
 
     async def auto_load_on_start():
-        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name
+        nonlocal settings, selected_game_mode, draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         snapshot = None
+        visual = None
+        try:
+            visual = storage.load_visual_settings()
+        except Exception:
+            pass
+        if visual is None:
+            try:
+                preferences = ft.SharedPreferences()
+                raw_visual = await preferences.get(VISUAL_SETTINGS_KEY)
+                if raw_visual:
+                    visual = json.loads(raw_visual)
+            except Exception:
+                pass
+        if visual is not None:
+            restore_visual_settings_payload(visual)
         try:
             snapshot = storage.load_game()
         except Exception:
@@ -1096,6 +1307,8 @@ def main(page: ft.Page):
             selected_game_mode = settings.game_mode
             draft_card_back_name = settings.card_back_name
             draft_theme_name = settings.theme_name
+            draft_board_bg_style = settings.board_bg_style
+            draft_board_bg_target = settings.board_bg_target
             sync_board_visuals(update=False)
             board.set_status("Partida anterior carregada.")
             render_route(page.route or "/intro")
@@ -1117,15 +1330,7 @@ def main(page: ft.Page):
                 pass
         if visual is None:
             return
-        back = visual.get("card_back_name", "classic")
-        theme_v = visual.get("theme_name", "classic")
-        from solitaire.settings import BACK_OPTIONS as _BA, THEME_OPTIONS as _TO
-        if back in _BA:
-            settings.card_back_name = back
-            draft_card_back_name = back
-        if theme_v in _TO:
-            settings.theme_name = theme_v
-            draft_theme_name = theme_v
+        restore_visual_settings_payload(visual)
         sync_board_visuals(update=False)
         render_route(page.route or "/intro")
 
@@ -1168,11 +1373,12 @@ def main(page: ft.Page):
 
     def apply_page_theme():
         theme = effective_theme()
+        board_state = effective_board_state()
         page.padding = 0 if page.route == "/game" else page_padding()
         page.bgcolor = theme["page_bg"]
-        board_frame.bgcolor = theme["board_bg"]
+        board_frame.bgcolor = board_state["color"]
         # Board background image — per-theme, behind the game
-        bg = effective_board_bg()
+        bg = board_state["image"]
         board_frame.image = ft.DecorationImage(src=bg, fit=ft.BoxFit.COVER, opacity=0.75) if bg else None
         board_frame.padding = ft.Padding.symmetric(
             horizontal=2 if is_narrow() else 12,
@@ -1914,6 +2120,8 @@ def main(page: ft.Page):
         selected = (
             draft_card_back_name == preset["back"]
             and draft_theme_name == preset["theme"]
+            and draft_board_bg_style == preset.get("board_bg_style", "theme_color")
+            and draft_board_bg_target == preset.get("board_bg_target", "")
         )
         border_color = cur_theme["accent"] if selected else cur_theme["slot_border"]
         swatch = ft.Container(
@@ -1951,7 +2159,7 @@ def main(page: ft.Page):
                                 color=cur_theme["page_bg"] if selected else cur_theme["text"],
                             ),
                             ft.Text(
-                                "Carta + Mesa combinados",
+                                "Carta + paleta + board",
                                 size=11,
                                 color=cur_theme["page_bg"] if selected else cur_theme["muted"],
                             ),
@@ -2109,6 +2317,372 @@ def main(page: ft.Page):
                         surface_card(
                             "Guardar escolha",
                             "Confirma as alterações.",
+                            actions,
+                            ft.Icons.CHECK_CIRCLE_OUTLINE,
+                        ),
+                    ],
+                )
+            ],
+        )
+
+    def _build_config_view_legacy():
+        theme = effective_theme()
+        board_state = effective_board_state(use_draft=True)
+
+        def set_theme_tab(tab_name):
+            nonlocal config_theme_tab
+            if config_theme_tab == tab_name:
+                return
+            config_theme_tab = tab_name
+            render_route("/config")
+
+        def reset_back_to_default(_e):
+            nonlocal draft_card_back_name
+            draft_card_back_name = draft_theme_name
+            apply_visual_draft()
+
+        def use_theme_board_color(_e=None):
+            nonlocal draft_board_bg_style, draft_board_bg_target
+            draft_board_bg_style = "theme_color"
+            draft_board_bg_target = ""
+            apply_visual_draft()
+
+        def select_board_color(theme_name):
+            nonlocal draft_board_bg_style, draft_board_bg_target
+            draft_board_bg_style = "preset_color"
+            draft_board_bg_target = theme_name
+            apply_visual_draft()
+
+        def select_board_image(back_name):
+            nonlocal draft_board_bg_style, draft_board_bg_target
+            draft_board_bg_style = "image"
+            draft_board_bg_target = back_name
+            apply_visual_draft()
+
+        def config_tab_button(label, icon, tab_name):
+            active = config_theme_tab == tab_name
+            return ft.Container(
+                on_click=lambda e, tn=tab_name: set_theme_tab(tn),
+                padding=ft.Padding.symmetric(horizontal=16, vertical=10),
+                border_radius=ft.BorderRadius.all(999),
+                bgcolor=theme["accent"] if active else theme["panel_bg_alt"],
+                border=ft.Border.all(1.2, theme["accent"] if active else theme["slot_border"]),
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(
+                            icon,
+                            size=16,
+                            color=theme["page_bg"] if active else theme["accent"],
+                        ),
+                        ft.Text(
+                            label,
+                            size=13,
+                            weight=ft.FontWeight.W_600,
+                            color=theme["page_bg"] if active else theme["text"],
+                        ),
+                    ],
+                    spacing=8,
+                    tight=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+            )
+
+        def build_board_color_tile(title, subtitle, color, selected, on_click):
+            swatch = ft.Container(
+                width=72,
+                height=56,
+                border_radius=ft.BorderRadius.all(12),
+                bgcolor=color,
+                border=ft.Border.all(1.5, theme["accent"] if selected else theme["slot_border"]),
+            )
+            return option_tile(
+                title=title,
+                subtitle=subtitle,
+                selected=selected,
+                icon=ft.Icons.PALETTE,
+                on_click=on_click,
+                media=swatch,
+            )
+
+        def build_board_image_tile(back_name):
+            back_data = BACK_OPTIONS[back_name]
+            selected = (
+                board_state["style"] == "image"
+                and board_state["target"] == back_name
+            )
+            preview = ft.Container(
+                height=92,
+                border_radius=ft.BorderRadius.all(16),
+                border=ft.Border.all(1.2, theme["accent"] if selected else theme["slot_border"]),
+                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                bgcolor=theme["panel_bg_alt"],
+                image=ft.DecorationImage(
+                    src=back_data["board_bg"],
+                    fit=ft.BoxFit.COVER,
+                    opacity=0.9,
+                ),
+            )
+            return option_tile(
+                title=back_data["label"],
+                subtitle="Usa apenas a imagem do board",
+                selected=selected,
+                icon=ft.Icons.WALLPAPER,
+                on_click=lambda e, bn=back_name: select_board_image(bn),
+                media=preview,
+            )
+
+        default_back_available = draft_theme_name in BACK_OPTIONS
+        back_mismatch = draft_card_back_name != draft_theme_name and default_back_available
+        default_back_label = BACK_OPTIONS[draft_theme_name]["label"] if default_back_available else ""
+
+        reset_chip = ft.Container(
+            on_click=reset_back_to_default,
+            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+            border_radius=ft.BorderRadius.all(999),
+            bgcolor=theme["chip_bg"],
+            border=ft.Border.all(1.2, theme["slot_border"]),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.REFRESH, size=15, color=theme["accent"]),
+                    ft.Text(
+                        f"Restaurar verso padrao ({default_back_label})",
+                        size=12,
+                        color=theme["text"],
+                    ),
+                ],
+                spacing=6,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        ) if back_mismatch else None
+
+        back_tiles = ft.Column(
+            controls=(
+                [reset_chip] if reset_chip else []
+            ) + [
+                build_card_back_tile(name, data)
+                for name, data in BACK_OPTIONS.items()
+            ],
+            spacing=10,
+            tight=True,
+        )
+
+        theme_tiles = ft.Column(
+            controls=[
+                build_theme_tile(name, data)
+                for name, data in THEME_OPTIONS.items()
+            ],
+            spacing=10,
+            tight=True,
+        )
+
+        preset_tiles = ft.Column(
+            controls=[build_preset_tile(p) for p in available_visual_presets()],
+            spacing=10,
+            tight=True,
+        )
+
+        theme_tabs = ft.Row(
+            controls=[
+                config_tab_button("Mudar tudo", ft.Icons.AUTO_AWESOME, "combo"),
+                config_tab_button("So paleta", ft.Icons.PALETTE, "palette"),
+            ],
+            wrap=True,
+            spacing=10,
+            run_spacing=10,
+        )
+
+        theme_block = ft.Column(
+            controls=[
+                theme_tabs,
+                preset_tiles if config_theme_tab == "combo" else theme_tiles,
+            ],
+            spacing=14,
+            tight=True,
+        )
+
+        current_theme_data = THEME_OPTIONS.get(draft_theme_name, THEME_OPTIONS["classic"])
+        board_preview = ft.Container(
+            width=panel_width(),
+            padding=18,
+            border_radius=ft.BorderRadius.all(24),
+            bgcolor=board_state["color"],
+            border=ft.Border.all(1.2, theme["slot_border"]),
+            image=ft.DecorationImage(
+                src=board_state["image"],
+                fit=ft.BoxFit.COVER,
+                opacity=0.82,
+            ) if board_state["image"] else None,
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.WALLPAPER, size=16, color=current_theme_data["accent"]),
+                            ft.Text(
+                                board_state["label"],
+                                size=14,
+                                weight=ft.FontWeight.BOLD,
+                                color=current_theme_data["text"],
+                            ),
+                        ],
+                        spacing=8,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Text(
+                        board_state["description"],
+                        size=12,
+                        color=current_theme_data["muted"],
+                    ),
+                    ft.Row(
+                        controls=[
+                            ft.Container(
+                                width=54,
+                                height=78,
+                                border_radius=ft.BorderRadius.all(12),
+                                bgcolor=current_theme_data["slot_bg"],
+                                border=ft.Border.all(1.2, current_theme_data["slot_border"]),
+                            )
+                            for _ in range(3)
+                        ],
+                        spacing=10,
+                        wrap=True,
+                    ),
+                ],
+                spacing=12,
+                tight=True,
+            ),
+        )
+
+        board_color_tiles = [
+            build_board_color_tile(
+                "Cor do tema atual",
+                current_theme_data["label"],
+                current_theme_data["board_bg"],
+                board_state["style"] == "theme_color",
+                use_theme_board_color,
+            )
+        ] + [
+            build_board_color_tile(
+                THEME_OPTIONS[name]["label"],
+                "Cor padrao do board",
+                THEME_OPTIONS[name]["board_bg"],
+                board_state["style"] == "preset_color" and board_state["target"] == name,
+                lambda e, tn=name: select_board_color(tn),
+            )
+            for name in available_board_color_themes()
+        ]
+
+        board_image_names = available_board_image_backs()
+        board_images_content = (
+            ft.Column(
+                controls=[build_board_image_tile(name) for name in board_image_names],
+                spacing=10,
+                tight=True,
+            )
+            if board_image_names
+            else ft.Text(
+                "Ainda nao existem imagens de board personalizadas guardadas.",
+                size=12,
+                color=theme["muted"],
+            )
+        )
+
+        board_content = ft.Column(
+            controls=[
+                board_preview,
+                ft.Text("Cores do board", size=13, weight=ft.FontWeight.BOLD, color=theme["text"]),
+                ft.Row(
+                    controls=board_color_tiles,
+                    wrap=True,
+                    spacing=10,
+                    run_spacing=10,
+                ),
+                ft.Text("Imagens do board", size=13, weight=ft.FontWeight.BOLD, color=theme["text"]),
+                board_images_content,
+            ],
+            spacing=14,
+            tight=True,
+        )
+
+        actions = ft.Row(
+            controls=[
+                action_chip(
+                    "Voltar",
+                    ft.Icons.ARROW_BACK,
+                    lambda e: navigate(config_return_route),
+                ),
+                action_chip(
+                    "Gerir temas",
+                    ft.Icons.TUNE,
+                    lambda e: navigate("/manage-themes"),
+                ),
+                action_chip(
+                    "Concluir",
+                    ft.Icons.CHECK,
+                    apply_config,
+                    tone="filled",
+                ),
+            ],
+            wrap=True,
+            spacing=12,
+            run_spacing=12,
+        )
+
+        preview_label = (
+            f"{BACK_OPTIONS[draft_card_back_name]['label']} + "
+            f"{THEME_OPTIONS[draft_theme_name]['label']} + "
+            f"{board_state['label']}"
+        )
+        preview_bar = ft.Container(
+            width=panel_width(),
+            padding=14,
+            border_radius=ft.BorderRadius.all(20),
+            bgcolor=theme["panel_bg_alt"],
+            border=ft.Border.all(1.2, theme["slot_border"]),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.TUNE, size=16, color=theme["accent"]),
+                    ft.Text(
+                        f"A pre-visualizar: {preview_label}",
+                        size=13,
+                        color=theme["text"],
+                    ),
+                ],
+                spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+        return ft.Column(
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Column(
+                    spacing=16,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        preview_bar,
+                        surface_card(
+                            "Temas pre feitos",
+                            "Usa a tab para mudar tudo de uma vez ou apenas a paleta.",
+                            theme_block,
+                            ft.Icons.AUTO_AWESOME,
+                        ),
+                        surface_card(
+                            "Costas das cartas",
+                            "Escolhe o padrao que aparece no baralho.",
+                            back_tiles,
+                            ft.Icons.STYLE,
+                        ),
+                        surface_card(
+                            "Fundo do board",
+                            "Escolhe a cor do board ou uma imagem de fundo independente.",
+                            board_content,
+                            ft.Icons.WALLPAPER,
+                        ),
+                        surface_card(
+                            "Guardar escolha",
+                            "Confirma as alteracoes.",
                             actions,
                             ft.Icons.CHECK_CIRCLE_OUTLINE,
                         ),

@@ -242,9 +242,15 @@ class GameBoard(ft.Stack):
         return state
 
     def restore_state(self, snapshot, clear_history=False, set_initial=False, announce=True):
+        current_card_back_name = self.settings.card_back_name
+        current_theme_name = self.settings.theme_name
+        current_board_bg_style = getattr(self.settings, "board_bg_style", "theme_color")
+        current_board_bg_target = getattr(self.settings, "board_bg_target", "")
         restored_settings = Settings.from_dict(snapshot.get("settings", {}))
-        restored_settings.card_back_name = self.settings.card_back_name
-        restored_settings.theme_name = self.settings.theme_name
+        restored_settings.card_back_name = current_card_back_name
+        restored_settings.theme_name = current_theme_name
+        restored_settings.board_bg_style = current_board_bg_style
+        restored_settings.board_bg_target = current_board_bg_target
         self.settings = restored_settings
         self.deck_passes_remaining = int(snapshot.get("deck_passes_remaining", self.settings.deck_passes_allowed))
         self.score = int(snapshot.get("score", GAME_MODES[self.settings.game_mode]["starting_score"]))
