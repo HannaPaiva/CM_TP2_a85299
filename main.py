@@ -578,6 +578,12 @@ def main(page: ft.Page):
             ),
         )
 
+    def empty_game_action_slot():
+        return ft.Container(
+            width=44 if is_narrow() else 48,
+            height=44 if is_narrow() else 48,
+        )
+
     def surface_card(title, subtitle, content, icon):
         theme = effective_theme()
         header = ft.Row(
@@ -1033,6 +1039,15 @@ def main(page: ft.Page):
 
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.setup()
+
+    page.services.append(
+        ft.ShakeDetector(
+            minimum_shake_count=4,
+            shake_slop_time_ms=300,
+            shake_count_reset_time_ms=1000,
+            on_shake=lambda _: board.auto_win() if (page.route or "/intro") == "/game" else None,
+        )
+    )
 
     board_frame = ft.Container(
         content=board,
@@ -2500,7 +2515,7 @@ Ou começa um jogo novo!''',
                         game_action_button(ft.Icons.CASINO, "Novo jogo", new_game),
                         game_action_button(ft.Icons.RESTART_ALT, "Reiniciar", restart),
                         game_action_button(ft.Icons.UNDO, "Desfazer", undo),
-                        game_action_button(ft.Icons.SAVE, "Guardar", save_clicked),
+                        empty_game_action_slot(),
                         game_action_button(ft.Icons.DOWNLOAD, "Carregar", load_clicked),
                     ],
                 ),
@@ -2590,9 +2605,16 @@ Ou começa um jogo novo!''',
         board.display_waste(update=False)
         render_route(page.route or "/intro")
 
+    async def lock_portrait_mode():
+        try:
+            await page.set_allowed_device_orientations([ft.DeviceOrientation.PORTRAIT_UP])
+        except Exception:
+            pass
+
     page.on_resize = handle_resize
     page.on_close = handle_close
     page.run_task(run_timer)
+    page.run_task(lock_portrait_mode)
     navigate("/intro")
     page.run_task(auto_load_on_start)
 

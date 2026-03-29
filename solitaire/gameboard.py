@@ -345,6 +345,33 @@ class GameBoard(ft.Stack):
         if update and self.can_update():
             self.update()
 
+    def auto_win(self):
+        if self._game_won:
+            return
+
+        self.save_undo_state()
+        snapshot = self.capture_state(include_initial=True)
+        snapshot["stock"] = []
+        snapshot["waste"] = []
+        snapshot["tableau"] = [[] for _ in self.tableau]
+        snapshot["foundation"] = [
+            [f"{rank.name}_{suite.name}" for rank in RANKS]
+            for suite in SUITES
+        ]
+        snapshot["face_up"] = {card.card_id: True for card in self.cards}
+        snapshot["game_won"] = True
+
+        self.restore_state(
+            snapshot,
+            clear_history=False,
+            set_initial=False,
+            announce=False,
+        )
+        self._game_won = True
+        self.set_status("Vitória automática ativada.", autosave=True)
+        if self.on_win is not None:
+            self.on_win()
+
     def apply_score_for_move(self, source_type, target_type):
         if target_type == "foundation" and source_type in ("waste", "tableau"):
             self.score += 10
