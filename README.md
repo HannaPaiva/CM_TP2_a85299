@@ -1,45 +1,227 @@
-# Solitaire Atelier
+# Solitaire
 
-Aplicacao desenvolvida em Python com Flet para o TP2 de Computacao Movel. O projeto parte de uma base de Klondike Solitaire e acrescenta as funcionalidades pedidas nos objetivos 2 e 3 do enunciado: controlo de partida, persistencia, pontuacao, personalizacao visual e niveis de dificuldade. A interface foi reorganizada para seguir a ideia do Solitaire & Casual Games do Windows, com um tabuleiro central, painel de informacao sempre visivel e um menu hamburger no canto superior esquerdo que concentra todas as opcoes principais.
+Aplicacao de Paciencia/Klondike desenvolvida em Python com Flet para o TP2 de Computacao Movel.
 
-## Funcionalidade 1: controlo de partida e recuperacao de jogadas
 
-Uma das inclusoes mais importantes foi o conjunto de ferramentas de controlo da partida: novo jogo, reinicio da distribuicao atual e desfazer jogadas. Esta decisao foi motivada por duas necessidades muito claras. Em primeiro lugar, estas acoes fazem parte da expectativa normal de quem joga Solitaire em plataformas modernas, sobretudo quando o objetivo e aproximar a experiencia do que existe no ecossistema Windows. Em segundo lugar, permitem demonstrar que a aplicacao nao se limita a animar cartas no ecra, mas possui um modelo de estado consistente, capaz de reconstruir uma jogada anterior com rigor. O sistema de `undo` foi implementado com snapshots completos do tabuleiro antes de cada acao relevante, o que inclui movimentos entre tableau, waste e fundacoes, compra de cartas do stock e reciclagem da waste. Desta forma, o restauro nao depende de inferencias parciais e o comportamento mantem-se previsivel.
+Autora: Hanna Paiva
 
-O reinicio da partida nao cria um novo baralho aleatorio; em vez disso, repoe a distribuicao inicial da partida corrente. Isto e relevante porque o utilizador pode experimentar estrategias diferentes sem perder o mesmo arranque de jogo. O menu hamburger reune estas opcoes num unico local, reduzindo ruido visual no tabuleiro e favorecendo a utilizacao em telemovel e tablet. A nivel de usabilidade, esta funcionalidade melhora bastante a experiencia porque reduz a frustracao causada por um erro de toque ou por uma jogada precipitada. Em termos de avaliacao, mostra tambem capacidade de gerir historico de estados, de restaurar a interface de forma coerente e de manter a logica do jogo sincronizada com a apresentacao visual.
+## O que e este programa
 
-## Funcionalidade 2: persistencia com DuckDB e local storage
+O `Solitaire` e uma aplicacao interativa de Paciencia inspirada no Klondike classico. O objetivo do jogo e mover todas as 52 cartas para as quatro fundacoes, respeitando as regras tradicionais:
 
-A persistencia da partida foi pensada como uma funcionalidade central do objetivo 2, e nao como um simples extra acessorio. O enunciado pede explicitamente que o estado do jogo possa ser guardado e carregado a partir de DuckDB e local storage, por isso a implementacao foi desenhada para usar ambos os mecanismos em paralelo. Sempre que o utilizador escolhe guardar a partida, o tabuleiro atual e serializado para um snapshot completo com cartas no stock, waste, tableau e fundacoes, cartas viradas para cima ou para baixo, seed da partida, pontuacao, tempo decorrido, dificuldade, back selecionado e tema visual. Esse snapshot e escrito para uma base `DuckDB` local e tambem para o armazenamento persistente do cliente via `SharedPreferences` do Flet. No carregamento, a aplicacao tenta recuperar primeiro a versao em DuckDB e, caso nao exista, utiliza o estado em local storage.
+1. no tableau, as cartas descem de valor e alternam cor;
+2. nas fundacoes, as cartas sobem do As ao Rei dentro do mesmo naipe;
+3. o stock alimenta a waste, e a waste serve como apoio para novas jogadas.
 
-O motivo para incluir os dois mecanismos foi garantir redundancia e demonstrar um fluxo de persistencia mais completo. O `DuckDB` cumpre a exigencia tecnologica do enunciado e oferece um armazenamento estruturado no disco, enquanto o local storage ajuda a manter uma copia leve e imediata das preferencias e do ultimo estado salvo. A vantagem pratica para o utilizador e evidente: uma partida pode ser interrompida e retomada sem perder progresso, mesmo depois de fechar a aplicacao. Esta funcionalidade tambem reforca a percecao de produto acabado, porque o jogo deixa de ser efemero e passa a acompanhar o utilizador entre sessoes. Para efeitos de demonstracao, o menu inclui botoes diretos de guardar e carregar, com mensagens de estado que explicam de onde foi recuperada a partida e se algum dos mecanismos ficou indisponivel.
+Para alem da logica base, o programa foi pensado como um produto completo:
 
-## Funcionalidade 3: pontuacao e cronometro
+- tem ecras dedicados para intro, jogo, configuracao visual e gestao de temas;
+- guarda e restaura progresso;
+- permite mudar o visual da mesa;
+- funciona com layout responsivo;
+- inclui uma celebracao animada de vitoria.
 
-O sistema de pontuacao com cronometro visivel durante toda a partida foi incluido para aproximar a app do comportamento esperado num Solitaire moderno e para dar mais contexto ao progresso do jogador. O cronometro corre continuamente enquanto a partida esta ativa e para de evoluir quando o jogador vence. A pontuacao muda de acordo com o tipo de movimento, privilegiando jogadas uteis como mover cartas para a fundacao, tirar cartas da waste para o tableau e revelar novas cartas no tableau. Isto cria um feedback constante e torna a partida mais legivel, porque cada acao deixa de ser apenas visual e passa a ter peso numerico. Alem disso, o cronometro e a pontuacao ajudam a comparar desempenhos entre partidas, sobretudo quando se experimentam dificuldades diferentes.
+## Tecnologias usadas
 
-Para manter o fluxo da aplicacao mais claro, a pontuacao ficou concentrada num unico conjunto de regras inspirado no Solitaire do Windows. Assim, o jogador recebe pontos por jogadas uteis como mover cartas para a fundacao, tirar cartas da waste para o tableau e revelar novas cartas no tableau, sem ter de escolher variantes de scoring antes de entrar na partida. Esta decisao torna o comportamento da aplicacao mais previsivel, reduz complexidade desnecessaria na interface e deixa a logica central do tabuleiro mais facil de seguir e manter.
+- Python 3.14+
+- Flet
+- DuckDB
+- uv para gestao de ambiente e dependencias
 
-## Funcionalidade 4: personalizacao visual com backs e temas independentes
+## Features do projeto
 
-A personalizacao visual foi tratada como a segunda grande funcionalidade nova do objetivo 3. O enunciado pedia a possibilidade de escolher entre quatro imagens traseiras para as cartas e, para alem disso, o utilizador queria poder mudar o tema da janela de jogo como um todo, mantendo a liberdade de alterar apenas o back ou apenas o tema do tabuleiro. Para cumprir esse pedido, o menu hamburger passou a disponibilizar duas secoes independentes: uma para os backs e outra para os temas. Os quatro backs usam diretamente os assets fornecidos em `solitaire/assets/backs`, o que garante coerencia com o material do projeto. Em paralelo, foram criados quatro temas de tabuleiro que combinam com esses backs, mas sem ficarem rigidamente acoplados a eles.
+## Jogabilidade
 
-Esta separacao tem uma justificacao clara em termos de experiencia de utilizacao. Se o back e o tema estivessem sempre ligados, a personalizacao seria artificial e limitada. Ao permitir a escolha independente, o utilizador pode criar combinacoes mais classicas, mais contrastadas ou mais ousadas, de acordo com a preferencia pessoal e com as condicoes do dispositivo onde esta a jogar. Para que a alteracao seja realmente percebida como “tema da janela”, a mudanca nao se limita ao tabuleiro: o fundo da pagina, o cabecalho, o painel lateral e os chips de informacao tambem adoptam a nova paleta. O resultado e uma aplicacao visualmente mais rica e mais proxima do que se espera de um jogo casual polido. Esta funcionalidade foi incluida porque melhora a identidade do projeto, responde diretamente ao pedido do cliente e evidencia trabalho de interface para alem da logica base do jogo.
+- Klondike/Paciencia com tableau, stock, waste e quatro fundacoes.
+- Novo jogo com seed aleatoria.
+- Reiniciar a mesma distribuicao inicial da ronda atual.
+- Undo com historico de snapshots completos.
+- Clique no stock para comprar cartas.
+- Reciclagem da waste para o stock segundo a dificuldade.
+- Duplo clique para tentar enviar cartas automaticamente para a fundacao.
 
-## Como utilizar
+## Dificuldade
 
-1. Criar o ambiente virtual com `uv venv`.
-2. Instalar as dependencias com `uv sync`.
-3. Executar a app com `uv run main.py` ou `uv run flet run .\main.py`.
-4. Abrir o menu hamburger no canto superior esquerdo para:
-   - iniciar um novo jogo;
-   - reiniciar a distribuicao atual;
-   - desfazer a ultima jogada;
-   - guardar e carregar o estado do jogo;
-   - trocar a dificuldade;
-   - escolher um back de cartas;
-   - escolher um tema de tabuleiro independentemente do back.
+- `easy`: compra 1 carta e passagens livres pelo stock.
+- `classic`: compra 3 cartas e passagens livres pelo stock.
+- `hard`: compra 3 cartas e limita as passagens pelo stock.
 
-## Nota sobre validacao
+## Score e tempo
 
-Nesta entrega, a logica e a interface foram adaptadas para comportamento responsivo, mas a validacao manual em varios dispositivos e sistemas operativos deve ser concluida durante a fase final de demonstracao do trabalho.
+- Score atualizado por tipo de jogada.
+- Cronometro sempre visivel durante a partida.
+- Paragem automatica do cronometro quando o jogo entra em vitoria.
+
+## Persistencia
+
+- Guardado e carregamento do estado da partida.
+- Persistencia redundante em:
+  - local storage do Flet;
+  - DuckDB (`solitaire_state.duckdb`).
+- Persistencia separada das preferencias visuais.
+- Autosave ao sair da rota de jogo.
+
+## Personalizacao visual
+
+- Versos de carta predefinidos.
+- Temas predefinidos de mesa.
+- Escolha independente entre verso, tema e fundo do board.
+- Fundo do board por cor do tema, por cor de outro tema ou por imagem.
+- Criacao de novos temas personalizados.
+- Edicao de cores dos temas personalizados.
+- Upload de verso da carta para novos temas.
+- Upload de fundo do board para novos temas.
+- Renomear e apagar temas personalizados.
+
+## UX e interface
+
+- Intro com continuar partida, nova partida e acesso ao visual.
+- Rota propria para criar temas.
+- Rota propria para gerir temas.
+- Scroll bloqueado na rota de jogo para nao atrapalhar o arrastar das cartas.
+- App bloqueada em orientacao vertical no telemovel.
+- Layout responsivo para diferentes larguras.
+
+## Vitoria e extras
+
+- Tela de vitoria animada com painel, transicoes e fogos.
+- A celebracao funciona tanto para vitoria normal como para autowin.
+- `ShakeDetector`: 4 shakes no jogo ativam autowin.
+- O autowin leva imediatamente as cartas para o estado final de vitoria.
+
+## Estrutura principal do projeto
+
+```text
+.
+|-- main.py
+|-- README.md
+|-- fluxo.md
+|-- pyproject.toml
+|-- uv.lock
+|-- assets/
+`-- solitaire/
+    |-- __init__.py
+    |-- card.py
+    |-- custom_theme_store.py
+    |-- gameboard.py
+    |-- settings.py
+    |-- slot.py
+    `-- storage.py
+```
+
+## O que cada ficheiro principal faz
+
+- `main.py`: ponto de entrada, rotas, construcao da UI, ligacao entre interface e motor do jogo.
+- `solitaire/gameboard.py`: motor principal da partida, regras, score, undo, snapshots e layout responsivo do tabuleiro.
+- `solitaire/card.py`: comportamento individual de cada carta, incluindo drag, click e double click.
+- `solitaire/slot.py`: representacao das pilhas do jogo.
+- `solitaire/settings.py`: catalogo de temas, versos, dificuldades e estrutura de configuracao serializavel.
+- `solitaire/storage.py`: persistencia em DuckDB.
+- `solitaire/custom_theme_store.py`: criacao, leitura e manutencao de temas personalizados e respetivos assets.
+
+## Setup com uv
+
+## 1. Instalar o uv
+
+Se ainda nao tiveres o `uv`, instala-o primeiro.
+
+No Windows PowerShell:
+
+```powershell
+pip install uv
+```
+
+## 2. Sincronizar o ambiente
+
+Na raiz do projeto, corre:
+
+```powershell
+uv sync
+```
+
+Este comando:
+
+- cria/atualiza o ambiente virtual;
+- instala as dependencias declaradas no `pyproject.toml`;
+- usa o `uv.lock` para manter a instalacao reprodutivel.
+
+## 3. Executar a aplicacao
+
+Opcao mais direta:
+
+```powershell
+uv run python main.py
+```
+
+Opcao equivalente usando o runner do Flet:
+
+```powershell
+uv run flet run .\main.py
+```
+
+## 4. Abrir no browser ou no dispositivo
+
+Dependendo do fluxo do Flet, a app pode abrir localmente no browser ou mostrar QR code para abrir no telemovel.
+
+## Fluxo de utilizacao
+
+1. Abrir a app.
+2. Entrar na intro.
+3. Escolher `Continuar` ou `Nova partida`.
+4. Jogar normalmente no tabuleiro.
+5. Abrir `Visual` para mudar tema, verso e fundo do board.
+6. Abrir `Criar tema` para gerar um tema personalizado.
+7. Abrir `Gerir temas` para editar ou apagar temas personalizados.
+8. Guardar/carregar partida quando necessario.
+9. Ganhar normalmente ou ativar autowin com 4 shakes.
+
+## Como correr para apresentacao
+
+Sugestao de demonstracao:
+
+1. Mostrar a intro.
+2. Entrar numa partida guardada.
+3. Mostrar `Undo`, `Reiniciar` e `Carregar`.
+4. Abrir o configurador visual.
+5. Criar ou editar um tema.
+6. Voltar ao jogo e mostrar o novo visual aplicado.
+7. Fazer 4 shakes para disparar autowin.
+8. Mostrar a tela animada de vitoria.
+
+## Persistencia e ficheiros gerados
+
+- `solitaire_state.duckdb`: base de dados local com estado do jogo e preferencias visuais.
+- `solitaire/custom_themes.json`: catalogo dos temas personalizados.
+- `assets/backs/custom/`: versos carregados pela utilizadora.
+- `assets/boards/`: fundos personalizados de board.
+
+## Comandos uteis
+
+Sincronizar dependencias:
+
+```powershell
+uv sync
+```
+
+Executar a app:
+
+```powershell
+uv run python main.py
+```
+
+Validar sintaxe:
+
+```powershell
+uv run python -m compileall main.py solitaire
+```
+
+## Estado atual do projeto
+
+- modo de jogo removido para simplificar o fluxo;
+- foco em um unico modelo de score e de partida;
+- documentacao interna em portugues adicionada nos modulos ativos;
+- README e `fluxo.md` alinhados com a implementacao atual.
+
+## Nota final
+
+O projeto foi organizado para ser mais facil de manter, explicar e evoluir. O motor do jogo esta concentrado no pacote `solitaire`, enquanto `main.py` ficou como camada de apresentacao e fluxo.

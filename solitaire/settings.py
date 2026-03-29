@@ -1,3 +1,17 @@
+"""
+Configuracoes globais do jogo e catalogo de temas/versos.
+
+Este modulo serve como fonte unica de verdade para:
+
+1. versos de carta disponiveis;
+2. temas visuais predefinidos e personalizados;
+3. presets de dificuldade;
+4. configuracao serializavel da partida.
+
+Ao concentrar estas definicoes num so lugar, o tabuleiro, a interface e a
+persistencia usam exatamente o mesmo conjunto de regras.
+"""
+
 from dataclasses import dataclass
 
 try:
@@ -95,6 +109,14 @@ THEME_OPTIONS = {
 
 
 def refresh_custom_theme_registry():
+    """
+    Recarrega temas e versos personalizados a partir do JSON do projeto.
+
+    O procedimento remove primeiro os registos personalizados atuais das
+    tabelas globais e depois volta a carregar o bundle salvo em disco. Desta
+    forma, a aplicacao trabalha sempre com um catalogo coerente e sem
+    duplicacoes.
+    """
     custom_backs = [name for name, data in BACK_OPTIONS.items() if data.get("custom")]
     custom_themes = [name for name, data in THEME_OPTIONS.items() if data.get("custom")]
     for name in custom_backs:
@@ -107,6 +129,7 @@ def refresh_custom_theme_registry():
         BACK_OPTIONS[name] = data
     for name, data in bundle.get("themes", {}).items():
         THEME_OPTIONS[name] = data
+
 
 DIFFICULTY_PRESETS = {
     "easy": {
@@ -132,6 +155,29 @@ DIFFICULTY_PRESETS = {
 
 @dataclass
 class Settings:
+    """
+    Representa a configuracao serializavel da partida e do visual.
+
+    Esta estrutura acompanha o tabuleiro, entra nos snapshots salvos e
+    permite restaurar a experiencia do jogador entre sessoes.
+
+    Attributes:
+        difficulty:
+            Nome do preset de dificuldade ativo.
+        card_back_name:
+            Identificador do verso da carta selecionado.
+        theme_name:
+            Identificador do tema visual selecionado.
+        board_bg_style:
+            Estrategia usada para o fundo do tabuleiro.
+        board_bg_target:
+            Alvo do fundo do tabuleiro, por exemplo um tema ou imagem.
+        waste_size:
+            Quantidade de cartas compradas de cada vez do stock.
+        deck_passes_allowed:
+            Numero maximo de passagens pelo stock.
+    """
+
     difficulty: str = "easy"
     card_back_name: str = "classic"
     theme_name: str = "classic"
@@ -141,9 +187,23 @@ class Settings:
     deck_passes_allowed: int = UNLIMITED_PASSES
 
     def __post_init__(self):
+        """
+        Aplica o preset de dificuldade logo apos a criacao.
+
+        Isto garante que `waste_size` e `deck_passes_allowed` ficam sempre
+        sincronizados com o nivel selecionado.
+        """
         self.apply_difficulty(self.difficulty)
 
     def apply_difficulty(self, difficulty):
+        """
+        Atualiza os parametros derivados da dificuldade.
+
+        Args:
+            difficulty:
+                Nome do preset desejado. Se for invalido, o sistema recua
+                para o preset `classic`.
+        """
         preset = DIFFICULTY_PRESETS.get(difficulty, DIFFICULTY_PRESETS["classic"])
         self.difficulty = difficulty if difficulty in DIFFICULTY_PRESETS else "classic"
         self.waste_size = int(preset["waste_size"])
@@ -151,17 +211,41 @@ class Settings:
 
     @property
     def card_back(self):
+        """
+        Resolve o asset do verso da carta atualmente selecionado.
+
+        Returns:
+            Caminho relativo do asset usado nas cartas viradas para baixo.
+        """
         return BACK_OPTIONS[self.card_back_name]["asset"]
 
     @property
     def theme(self):
+        """
+        Devolve o dicionario do tema visual atualmente ativo.
+
+        Returns:
+            Dicionario com cores e metadados do tema.
+        """
         return THEME_OPTIONS[self.theme_name]
 
     @property
     def difficulty_label(self):
+        """
+        Resolve o rotulo amigavel da dificuldade atual.
+
+        Returns:
+            Texto apresentado na interface.
+        """
         return DIFFICULTY_PRESETS[self.difficulty]["label"]
 
     def to_dict(self):
+        """
+        Serializa a configuracao para persistencia.
+
+        Returns:
+            Dicionario pronto para JSON.
+        """
         return {
             "difficulty": self.difficulty,
             "card_back_name": self.card_back_name,
@@ -174,6 +258,19 @@ class Settings:
 
     @classmethod
     def from_dict(cls, data):
+        """
+        Reconstroi um objeto `Settings` a partir de dados persistidos.
+
+        O metodo tambem valida referencias a temas, versos e estilos de
+        fundo para garantir que o objeto restaurado fica sempre coerente.
+
+        Args:
+            data:
+                Dicionario vindo de um snapshot salvo.
+
+        Returns:
+            Instancia validada de `Settings`.
+        """
         settings = cls(
             difficulty=str(data.get("difficulty", "classic")),
             card_back_name=str(

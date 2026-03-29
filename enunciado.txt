@@ -1,19 +1,24 @@
 
 🧑‍💻 Implemente e/ou confirme se a aplicação possui as seguintes funcionalidades, de acordo com o tema atribuído:
+🃏 Jogo de Cartas:
+Reiniciar o jogo.
 
-- Reiniciar o jogo.
-- Desfazer jogadas (i.e., undo).
-- Salvar e carregar o estado do jogo para e de um storage em duckdb + local storage
-- Escolher a imagem traseira das cartas, entre 4 opções diferentes. (configs presentes na raiz do projeto em solitaire/assets/backs)
-- Sistema de pontuação com cronómetro visível durante toda a partida.
+Desfazer jogadas (i.e., undo).
 
+Salvar e carregar o estado do jogo.
 
-- Faça níveis de dificuldade e deixe espaço para diferentes modos de jogo, 
-e quero poder mudar o tema da janela de jogo como um todo. Um tema que combine com cada um dos backs dos assets
-mas quero poder mudar singularmente so o back e so o tema. (ai trocaria a cor do board, basicamente) 
-Essas opções vão estar em um harburguer no canto superior esquerdo da tela.
-Elabore a funcionalidade de 
+Escolher a imagem traseira das cartas, entre 4 opções diferentes.
+
+Sistema de pontuação com cronómetro visível durante toda a partida.
+
+🆕 Objetivo 3 – Duas funcionalidades à sua escolha
+✌️ Adicione DUAS funcionalidades inovadoras à sua escolha, que considere relevantes para a aplicação (~80% da avaliação deste objetivo):
+💡 Seja criativo. Pode inspirar-se noutras aplicações semelhantes; ou nas funcionalidades dos TPs anteriores, mas com alguma inovação.
+
+🏅 As funcionalidades avançadas serão valorizadas, enquanto as muito simples (ou totalmente repetidas de outros TPs) serão penalizadas na avaliação atribuída a este objetivo.
+
+🤔 Se tiver dúvidas, consulte o docente.
+
+🎯 Certifique-se de que as funcionalidades escolhidas estão bem implementadas e não comprometem a usabilidade da aplicação.
 
 📄 Elabore um ficheiro README.md (formato markdown) na raiz do projeto, onde apresente os motivos de inclusão das funcionalidades extra e uma descrição detalhada das mesmas (~20% da avaliação deste objetivo):
-Escreva cerca de 200 – 300 palavras por funcionalidade, em português (pt-PT).
-

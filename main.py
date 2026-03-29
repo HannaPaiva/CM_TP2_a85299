@@ -1,3 +1,20 @@
+"""
+Aplicacao Flet principal do projeto de Paciencia.
+
+Este ficheiro concentra a composicao da interface, o roteamento interno e a
+orquestracao entre as camadas de dominio do jogo. Em termos práticos, ele e
+responsavel por:
+
+1. arrancar a app e preparar servicos Flet;
+2. construir e alternar entre as views (`/intro`, `/game`, `/config`, etc.);
+3. sincronizar preferencias visuais com o tabuleiro;
+4. guardar/carregar estado local e em DuckDB;
+5. ligar callbacks de jogo a elementos visuais, incluindo a tela de vitoria.
+
+O motor do jogo em si continua encapsulado no pacote `solitaire`; aqui vive
+sobretudo a camada de apresentacao e de fluxo.
+"""
+
 import asyncio
 import colorsys
 import json
@@ -66,6 +83,17 @@ VISUAL_PRESETS = [
 
 
 def main(page: ft.Page):
+    """
+    Ponto de entrada da aplicacao Flet.
+
+    O corpo desta funcao cria o estado compartilhado da sessao, declara
+    helpers internos, monta as views e liga eventos da pagina a funcoes de
+    alto nivel como navegacao, autosave e redimensionamento.
+
+    Args:
+        page:
+            Objeto `ft.Page` entregue pelo runtime do Flet.
+    """
     refresh_custom_theme_registry()
     settings = Settings()
     storage = GameStorage()
@@ -92,7 +120,7 @@ def main(page: ft.Page):
 
     studio_name_field = ft.TextField(
         label="Nome do tema",
-        value="Tema Atelier",
+        value="Tema Personalizado",
         hint_text="Ex.: Horizonte Neon",
         capitalization=ft.TextCapitalization.WORDS,
     )
@@ -292,7 +320,7 @@ def main(page: ft.Page):
 
     def theme_studio_palette():
         return build_theme_palette(
-            label=studio_name_field.value or "Tema Atelier",
+            label=studio_name_field.value or "Tema Personalizado",
             base_color=studio_base_field.value,
             surface_color=studio_surface_field.value,
             accent_color=studio_accent_field.value,
@@ -351,6 +379,13 @@ def main(page: ft.Page):
         return options
 
     def build_visual_settings_payload():
+        """
+        Consolida as preferencias visuais ativas num payload persistivel.
+
+        Returns:
+            Dicionario completo com verso, tema e configuracao do fundo do
+            tabuleiro, incluindo metadados uteis para futuras restauracoes.
+        """
         board_state = effective_board_state(use_draft=False)
         back_data = BACK_OPTIONS.get(settings.card_back_name, {})
         return {
@@ -377,6 +412,13 @@ def main(page: ft.Page):
         }
 
     def restore_visual_settings_payload(data):
+        """
+        Restaura preferencias visuais persistidas para o estado em memoria.
+
+        Args:
+            data:
+                Dicionario previamente guardado em storage local ou DuckDB.
+        """
         nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         back_name = str(data.get("card_back_name", "classic"))
         theme_name = str(data.get("theme_name", "classic"))
@@ -405,6 +447,12 @@ def main(page: ft.Page):
         draft_board_bg_target = board_target
 
     def should_show_intro_status():
+        """
+        Decide se a intro precisa de mostrar um banner de estado.
+
+        Returns:
+            `True` quando a mensagem atual nao e apenas um texto neutro.
+        """
         return intro_status.value not in {"", "Pronto para jogar.", "Partida anterior carregada."}
 
     async def pick_single_image(dialog_title, on_error=None):
@@ -1027,6 +1075,14 @@ def main(page: ft.Page):
         ))
 
     def refresh_hud(autosave=False):
+        """
+        Sincroniza score, tempo e mensagens entre o tabuleiro e a UI.
+
+        Args:
+            autosave:
+                Mantido na assinatura para compatibilidade com o callback
+                `on_change` do tabuleiro.
+        """
         score_text.value = f"Score: {board.score}"
         timer_text.value = f"Tempo: {board.format_elapsed()}"
         status_text.value = board.status_message
@@ -1072,6 +1128,13 @@ def main(page: ft.Page):
     )
 
     def sync_board_visuals(update=True):
+        """
+        Reaplica no tabuleiro a configuracao visual atualmente efetiva.
+
+        Args:
+            update:
+                Se `True`, o controlo do tabuleiro e atualizado no final.
+        """
         board.settings = settings
         board.apply_visual_preferences(update=False)
         board.display_waste(update=False)
@@ -1079,6 +1142,9 @@ def main(page: ft.Page):
             board.update()
 
     def sync_draft_visuals_from_settings():
+        """
+        Copia a configuracao efetiva para o estado temporario de edicao.
+        """
         nonlocal draft_card_back_name, draft_theme_name, draft_board_bg_style, draft_board_bg_target
         draft_card_back_name = settings.card_back_name
         draft_theme_name = settings.theme_name
@@ -1086,6 +1152,9 @@ def main(page: ft.Page):
         draft_board_bg_target = settings.board_bg_target
 
     def sync_settings_from_board():
+        """
+        Faz o caminho inverso: traz do tabuleiro para `settings` o estado atual.
+        """
         nonlocal settings
         settings = board.settings
         sync_draft_visuals_from_settings()
@@ -1112,6 +1181,16 @@ def main(page: ft.Page):
             return str(exc)
 
     def load_storage_payload(loader):
+        """
+        Executa um loader de persistencia com tolerancia a falhas.
+
+        Args:
+            loader:
+                Callable que tenta ler um payload de storage.
+
+        Returns:
+            O payload carregado, ou `None` se a origem falhar.
+        """
         try:
             return loader()
         except Exception:
@@ -1138,6 +1217,12 @@ def main(page: ft.Page):
             pass
 
     def autosave_current_state_sync():
+        """
+        Dispara a gravacao da partida em modo sincrono e assincro.
+
+        A copia DuckDB e tentada imediatamente e a copia em preferencias
+        locais e delegada para `page.run_task`.
+        """
         snapshot = board.capture_state(include_initial=True)
         try:
             storage.save_game(snapshot)
@@ -1154,6 +1239,13 @@ def main(page: ft.Page):
             pass
 
     def navigate(route: str):
+        """
+        Muda a rota interna da app e trata efeitos secundarios do fluxo.
+
+        Args:
+            route:
+                Nova rota logica a apresentar.
+        """
         current_route = page.route or "/intro"
         if current_route == "/game" and route == "/intro":
             autosave_current_state_sync()
@@ -1276,6 +1368,13 @@ def main(page: ft.Page):
         board.set_status(f"Tema '{created['theme']['label']}' criado.")
 
     def apply_visual_draft(refresh_route=True):
+        """
+        Confirma as escolhas do configurador visual para o estado efetivo.
+
+        Args:
+            refresh_route:
+                Se `True`, redesenha a rota atual para refletir o novo visual.
+        """
         nonlocal draft_board_bg_style, draft_board_bg_target
         settings.card_back_name = draft_card_back_name
         settings.theme_name = draft_theme_name
@@ -1768,6 +1867,9 @@ def main(page: ft.Page):
     )
 
     def sync_victory_layout():
+        """
+        Ajusta dimensoes do overlay de vitoria ao tamanho atual da janela.
+        """
         available_width = max(300, page_width() - 28)
         victory_panel.width = min(560, available_width)
         button_width = None if not is_narrow() else max(220, available_width - 36)
@@ -1799,6 +1901,16 @@ def main(page: ft.Page):
         return sequence_id == victory_sequence and (page.route or "/intro") == "/game"
 
     def hide_victory_celebration(e=None, immediate=False):
+        """
+        Fecha a tela de vitoria e invalida qualquer animacao em curso.
+
+        Args:
+            e:
+                Evento opcional do Flet.
+            immediate:
+                Parametro semantico usado pelos chamadores para indicar fecho
+                sem transicao de fluxo.
+        """
         nonlocal victory_visible, victory_sequence
         victory_sequence += 1
         victory_visible = False
@@ -1814,6 +1926,21 @@ def main(page: ft.Page):
             pass
 
     async def launch_firework(slot_index, center_x, center_y, delay, sequence_id):
+        """
+        Dispara uma explosao individual de fogos no overlay de vitoria.
+
+        Args:
+            slot_index:
+                Slot de particulas reutilizado nesta explosao.
+            center_x:
+                Coordenada horizontal do centro do burst.
+            center_y:
+                Coordenada vertical do centro do burst.
+            delay:
+                Tempo de espera antes da animacao.
+            sequence_id:
+                Token da celebracao ativa para impedir animacoes obsoletas.
+        """
         await asyncio.sleep(delay)
         if not victory_sequence_active(sequence_id):
             return
@@ -1886,6 +2013,15 @@ def main(page: ft.Page):
             return
 
     async def play_victory_celebration():
+        """
+        Encena a tela de vitoria cinematica por cima do jogo.
+
+        O fluxo faz:
+        - preparar score e tempo final;
+        - revelar o painel com `AnimatedSwitcher`;
+        - disparar varios bursts de fogos;
+        - trocar mensagens do titulo para dar sensacao de cena final.
+        """
         nonlocal victory_visible, victory_sequence
         if (page.route or "/intro") != "/game" or victory_visible:
             return
@@ -1998,6 +2134,9 @@ def main(page: ft.Page):
         board.start_new_game()
 
     def trigger_victory_celebration():
+        """
+        Reencaminha o callback de vitoria do tabuleiro para a cena animada.
+        """
         page.run_task(play_victory_celebration)
 
     board.on_win = trigger_victory_celebration
@@ -2015,6 +2154,9 @@ def main(page: ft.Page):
         board.set_status("Visual atualizado.")
 
     def apply_page_theme():
+        """
+        Propaga o tema efetivo para a pagina, appbar e moldura do tabuleiro.
+        """
         theme = effective_theme()
         board_state = effective_board_state()
         page.padding = 0 if page.route == "/game" else page_padding()
@@ -2053,6 +2195,9 @@ def main(page: ft.Page):
     # --- view builders ---
 
     def build_intro_view():
+        """
+        Monta a home da aplicacao com acessos a continuar, novo jogo e visual.
+        """
         theme = effective_theme()
         hero = ft.Container(
             width=panel_width(),
@@ -2140,6 +2285,9 @@ Ou começa um jogo novo!''',
         )
 
     def build_theme_studio_view():
+        """
+        Monta a view de criacao de um novo tema personalizado.
+        """
         theme = effective_theme()
         palette = theme_studio_palette()
         preview_src = studio_image_bytes if studio_image_bytes else settings.card_back
@@ -2385,6 +2533,9 @@ Ou começa um jogo novo!''',
         )
 
     def build_manage_themes_view():
+        """
+        Monta a view de gestao dos temas personalizados ja existentes.
+        """
         theme = effective_theme()
         custom_themes = {
             name: data
@@ -2753,6 +2904,9 @@ Ou começa um jogo novo!''',
         )
 
     def build_config_view():
+        """
+        Monta o configurador visual com presets, versos e fundo do board.
+        """
         theme = effective_theme()
         board_state = effective_board_state(use_draft=True)
 
@@ -3097,6 +3251,16 @@ Ou começa um jogo novo!''',
         )
 
     def safe_page(content):
+        """
+        Envolve uma view em `SafeArea` com padding padrao da app.
+
+        Args:
+            content:
+                Conteudo principal da rota.
+
+        Returns:
+            Estrutura Flet pronta para ser adicionada a `page`.
+        """
         return ft.SafeArea(
             content=ft.Container(
                 padding=ft.Padding.only(bottom=12),
@@ -3108,6 +3272,14 @@ Ou começa um jogo novo!''',
         )
 
     def build_game_view():
+        """
+        Constroi a rota principal do jogo.
+
+        A view agrega:
+        - cabecalho com score, tempo e acoes;
+        - tabuleiro responsivo;
+        - overlay de celebracao de vitoria.
+        """
         bottom_padding = 8 if is_narrow() else 14
         side_padding = 6 if is_narrow() else page_padding()
         sync_victory_layout()
@@ -3176,6 +3348,13 @@ Ou começa um jogo novo!''',
         )
 
     def render_route(route: str):
+        """
+        Reconstroi a pagina conforme a rota interna selecionada.
+
+        Args:
+            route:
+                Rota logica a apresentar.
+        """
         page.controls.clear()
         page.scroll = None if route == "/game" else ft.ScrollMode.AUTO
 
@@ -3221,6 +3400,12 @@ Ou começa um jogo novo!''',
     refresh_hud()
 
     async def run_timer():
+        """
+        Atualiza o cronometro da partida em segundo plano.
+
+        O contador pausa automaticamente quando o tabuleiro entra em estado
+        de vitoria.
+        """
         while True:
             await asyncio.sleep(1)
             if board._game_won:
@@ -3233,6 +3418,9 @@ Ou começa um jogo novo!''',
                 pass
 
     def handle_resize(e):
+        """
+        Recalcula layout, tabuleiro e overlays quando a janela muda.
+        """
         page.padding = page_padding()
         sync_victory_layout()
         board.apply_visual_preferences(update=False)
@@ -3240,6 +3428,9 @@ Ou começa um jogo novo!''',
         render_route(page.route or "/intro")
 
     async def lock_portrait_mode():
+        """
+        Tenta fixar a app em orientacao vertical no dispositivo movel.
+        """
         try:
             await page.set_allowed_device_orientations([ft.DeviceOrientation.PORTRAIT_UP])
         except Exception:

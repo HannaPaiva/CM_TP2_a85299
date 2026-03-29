@@ -1,3 +1,16 @@
+"""
+Persistencia e utilitarios dos temas personalizados.
+
+Este modulo permite criar, editar, renomear e remover temas definidos pela
+utilizadora. O formato persistido combina dois conjuntos de dados:
+
+1. o tema cromatico da aplicacao;
+2. o verso de carta associado a esse tema.
+
+O objetivo principal e manter os recursos personalizados consistentes entre a
+interface, o ficheiro JSON e os assets guardados em disco.
+"""
+
 import json
 import re
 from pathlib import Path
@@ -12,10 +25,36 @@ SUPPORTED_BACK_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 def _clamp(value, minimum, maximum):
+    """
+    Restringe um valor numerico a um intervalo.
+
+    Args:
+        value:
+            Valor a limitar.
+        minimum:
+            Limite inferior.
+        maximum:
+            Limite superior.
+
+    Returns:
+        Valor ajustado ao intervalo `[minimum, maximum]`.
+    """
     return max(minimum, min(maximum, value))
 
 
 def _normalize_hex(value, fallback):
+    """
+    Normaliza uma string hexadecimal para o formato `#RRGGBB`.
+
+    Args:
+        value:
+            Texto introduzido pela utilizadora.
+        fallback:
+            Cor de reserva usada quando `value` nao e valida.
+
+    Returns:
+        Cor hexadecimal normalizada em maiusculas.
+    """
     raw = str(value or "").strip().lstrip("#")
     if len(raw) == 3 and all(ch in "0123456789abcdefABCDEF" for ch in raw):
         raw = "".join(ch * 2 for ch in raw)
@@ -25,11 +64,27 @@ def _normalize_hex(value, fallback):
 
 
 def _hex_to_rgb(value):
+    """
+    Converte uma cor hexadecimal numa tripla RGB.
+
+    Args:
+        value:
+            Cor em formato hexadecimal.
+
+    Returns:
+        Tuplo `(red, green, blue)`.
+    """
     value = _normalize_hex(value, "#000000").lstrip("#")
     return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
 
 
 def _rgb_to_hex(red, green, blue):
+    """
+    Converte componentes RGB no formato `#RRGGBB`.
+
+    Returns:
+        Cor hexadecimal normalizada.
+    """
     return "#{:02X}{:02X}{:02X}".format(
         _clamp(int(round(red)), 0, 255),
         _clamp(int(round(green)), 0, 255),
@@ -38,6 +93,20 @@ def _rgb_to_hex(red, green, blue):
 
 
 def mix_colors(primary, secondary, ratio):
+    """
+    Mistura duas cores por interpolacao linear.
+
+    Args:
+        primary:
+            Cor base.
+        secondary:
+            Cor secundaria.
+        ratio:
+            Percentagem de influencia da segunda cor.
+
+    Returns:
+        Cor resultante em hexadecimal.
+    """
     ratio = _clamp(float(ratio), 0.0, 1.0)
     p_red, p_green, p_blue = _hex_to_rgb(primary)
     s_red, s_green, s_blue = _hex_to_rgb(secondary)
@@ -49,14 +118,60 @@ def mix_colors(primary, secondary, ratio):
 
 
 def lighten(color, amount):
+    """
+    Clareia uma cor aproximando-a do branco.
+
+    Args:
+        color:
+            Cor original.
+        amount:
+            Intensidade da mistura.
+
+    Returns:
+        Cor mais clara.
+    """
     return mix_colors(color, "#FFFFFF", amount)
 
 
 def darken(color, amount):
+    """
+    Escurece uma cor aproximando-a do preto.
+
+    Args:
+        color:
+            Cor original.
+        amount:
+            Intensidade da mistura.
+
+    Returns:
+        Cor mais escura.
+    """
     return mix_colors(color, "#000000", amount)
 
 
 def build_theme_palette(label, base_color, surface_color, accent_color, use_light_text=True):
+    """
+    Gera a paleta completa de um tema personalizado.
+
+    A interface do jogo nao trabalha apenas com tres cores. Para manter a
+    consistencia visual, este helper deriva todas as variacoes necessarias:
+    fundo da pagina, paineis, slot border, texto, muted e accent.
+
+    Args:
+        label:
+            Nome apresentado na interface.
+        base_color:
+            Cor principal do tabuleiro.
+        surface_color:
+            Cor dos paineis e superficies.
+        accent_color:
+            Cor usada para destaque.
+        use_light_text:
+            Indica se o texto principal deve ser claro.
+
+    Returns:
+        Dicionario de tema pronto para entrar em `THEME_OPTIONS`.
+    """
     base_color = _normalize_hex(base_color, "#1E6B42")
     surface_color = _normalize_hex(surface_color, "#153221")
     accent_color = _normalize_hex(accent_color, "#F1CE6E")
@@ -81,6 +196,15 @@ def build_theme_palette(label, base_color, surface_color, accent_color, use_ligh
 
 
 def _sanitize_back_entry(name, payload):
+    """
+    Valida um verso personalizado lido do JSON.
+
+    O objetivo aqui e proteger a aplicacao de ficheiros inexistentes ou
+    propriedades invalidadas por edicoes manuais no JSON.
+
+    Returns:
+        Dicionario sanitizado, ou `None` se o verso for inutilizavel.
+    """
     asset = str(payload.get("asset", "")).replace("\\", "/").lstrip("/")
     if not asset:
         return None
@@ -95,7 +219,6 @@ def _sanitize_back_entry(name, payload):
     except (TypeError, ValueError):
         scale = 1.0
 
-    # Optional per-theme board background image
     board_bg = None
     raw_board_bg = str(payload.get("board_bg", "") or "").replace("\\", "/").lstrip("/")
     if raw_board_bg:
@@ -115,6 +238,12 @@ def _sanitize_back_entry(name, payload):
 
 
 def _sanitize_theme_entry(name, payload):
+    """
+    Valida uma definicao de tema lida do JSON.
+
+    Returns:
+        Dicionario de tema com todas as cores normalizadas.
+    """
     return {
         "label": str(payload.get("label", name)).strip() or str(name),
         "page_bg": _normalize_hex(payload.get("page_bg"), "#08140E"),
@@ -134,6 +263,12 @@ def _sanitize_theme_entry(name, payload):
 
 
 def _load_raw_bundle():
+    """
+    Le o JSON bruto de temas personalizados.
+
+    Returns:
+        Dicionario com o conteudo do ficheiro, ou `{}` em caso de erro.
+    """
     if not CUSTOM_THEMES_FILE.exists():
         return {}
     try:
@@ -143,6 +278,16 @@ def _load_raw_bundle():
 
 
 def load_custom_theme_bundle():
+    """
+    Carrega e saneia o bundle completo de temas personalizados.
+
+    O metodo garante duas coisas:
+    - apenas ficam temas/versos validos;
+    - so sobrevivem entradas que tenham par tema + verso.
+
+    Returns:
+        Dicionario com duas chaves: `themes` e `backs`.
+    """
     raw_payload = _load_raw_bundle()
 
     themes = {}
@@ -164,6 +309,12 @@ def load_custom_theme_bundle():
 
 
 def load_custom_board_background_assets():
+    """
+    Carrega a lista de fundos de board personalizados ainda validos.
+
+    Returns:
+        Lista de opcoes para serem apresentadas na interface.
+    """
     raw_payload = _load_raw_bundle()
     options = []
     raw_asset = str(raw_payload.get("board_bg_image", "") or "").replace("\\", "/").lstrip("/")
@@ -182,7 +333,13 @@ def load_custom_board_background_assets():
 
 
 def _save_custom_theme_bundle(bundle):
-    """Save themes/backs while preserving all other top-level keys."""
+    """
+    Escreve o bundle de temas preservando outras chaves top-level do JSON.
+
+    Args:
+        bundle:
+            Estrutura com `themes` e `backs`.
+    """
     CUSTOM_THEMES_FILE.parent.mkdir(parents=True, exist_ok=True)
     existing = _load_raw_bundle()
     existing["themes"] = bundle.get("themes", {})
@@ -194,12 +351,31 @@ def _save_custom_theme_bundle(bundle):
 
 
 def _slugify_theme_name(label):
+    """
+    Converte o nome digitado pela utilizadora num identificador seguro.
+
+    Returns:
+        Nome em snake_case adequado para ficheiros e chaves internas.
+    """
     slug = re.sub(r"[^a-z0-9]+", "_", str(label).strip().lower()).strip("_")
     return slug or "tema_personalizado"
 
 
 def _save_board_bg_file(theme_name, image_bytes, original_filename):
-    """Save a board bg image for a theme. Returns the asset-relative path."""
+    """
+    Guarda em disco a imagem de fundo do board de um tema.
+
+    Args:
+        theme_name:
+            Nome interno do tema.
+        image_bytes:
+            Conteudo binario da imagem.
+        original_filename:
+            Nome original do ficheiro escolhido.
+
+    Returns:
+        Caminho relativo do asset, ou `None` se nao houver imagem.
+    """
     if not image_bytes:
         return None
     extension = Path(str(original_filename or "")).suffix.lower()
@@ -223,6 +399,23 @@ def save_custom_theme_bundle(
     board_bg_bytes=None,
     board_bg_filename=None,
 ):
+    """
+    Cria um novo tema personalizado e grava os assets associados.
+
+    O processo inclui:
+    - gerar um nome interno unico;
+    - gravar o verso personalizado em `assets/backs/custom`;
+    - opcionalmente gravar um fundo de board dedicado;
+    - gerar a paleta cromatica derivada;
+    - persistir tudo em `custom_themes.json`.
+
+    Returns:
+        Estrutura com nomes internos e payloads gerados.
+
+    Raises:
+        ValueError:
+            Se nao for fornecida uma imagem para o verso da carta.
+    """
     if not image_bytes:
         raise ValueError("Escolhe uma imagem para o verso da carta.")
 
@@ -276,10 +469,14 @@ def save_custom_theme_bundle(
     }
 
 
-# ── Theme management ──────────────────────────────────────────────────────────
-
 def delete_custom_theme(theme_name):
-    """Remove a custom theme from the bundle and delete its image files."""
+    """
+    Remove um tema personalizado e os seus ficheiros associados.
+
+    Args:
+        theme_name:
+            Nome interno do tema a apagar.
+    """
     bundle = load_custom_theme_bundle()
     back_entry = bundle["backs"].get(theme_name)
     if back_entry:
@@ -296,7 +493,15 @@ def delete_custom_theme(theme_name):
 
 
 def rename_custom_theme(theme_name, new_label):
-    """Update only the display label of a custom theme and its back entry."""
+    """
+    Atualiza apenas o rotulo apresentado na interface.
+
+    Args:
+        theme_name:
+            Nome interno do tema.
+        new_label:
+            Novo nome visivel para a utilizadora.
+    """
     bundle = load_custom_theme_bundle()
     new_label = str(new_label or "").strip() or theme_name
     if theme_name in bundle["themes"]:
@@ -307,10 +512,31 @@ def rename_custom_theme(theme_name, new_label):
 
 
 def update_custom_theme_palette(theme_name, base_color, surface_color, accent_color, use_light_text=True):
-    """Rebuild the colour palette for an existing custom theme."""
+    """
+    Reconstroi a paleta cromatica de um tema existente.
+
+    Args:
+        theme_name:
+            Nome interno do tema.
+        base_color:
+            Nova cor base do board.
+        surface_color:
+            Nova cor das superficies.
+        accent_color:
+            Nova cor de destaque.
+        use_light_text:
+            Define o modo de contraste do texto.
+
+    Returns:
+        Novo payload de tema.
+
+    Raises:
+        ValueError:
+            Se o tema nao existir no bundle.
+    """
     bundle = load_custom_theme_bundle()
     if theme_name not in bundle["themes"]:
-        raise ValueError(f"Tema '{theme_name}' não encontrado.")
+        raise ValueError(f"Tema '{theme_name}' nao encontrado.")
     old_label = bundle["themes"][theme_name].get("label", theme_name)
     new_palette = build_theme_palette(
         label=old_label,
@@ -326,15 +552,31 @@ def update_custom_theme_palette(theme_name, base_color, surface_color, accent_co
 
 def update_custom_theme_board_bg(theme_name, image_bytes, original_filename):
     """
-    Set or clear the board background for a custom theme.
-    Pass image_bytes=None to remove the board background.
-    Returns the new asset path or None.
+    Define, troca ou remove o fundo de board de um tema personalizado.
+
+    Regras:
+    - se `image_bytes` for `None`, o fundo atual e removido;
+    - se houver uma imagem nova, o ficheiro anterior e apagado antes de gravar.
+
+    Args:
+        theme_name:
+            Nome interno do tema.
+        image_bytes:
+            Conteudo binario da nova imagem, ou `None`.
+        original_filename:
+            Nome original do ficheiro escolhido.
+
+    Returns:
+        Caminho relativo do novo asset, ou `None` se o fundo for removido.
+
+    Raises:
+        ValueError:
+            Se o tema nao existir no bundle.
     """
     bundle = load_custom_theme_bundle()
     if theme_name not in bundle["backs"]:
-        raise ValueError(f"Tema '{theme_name}' não encontrado.")
+        raise ValueError(f"Tema '{theme_name}' nao encontrado.")
 
-    # Remove old board bg file if present
     old_path = bundle["backs"][theme_name].get("board_bg")
     if old_path:
         try:

@@ -1,5 +1,5 @@
 [project]
-name = "solitaire-atelier"
+name = "solitaire"
 version = "0.1.0"
 description = "Klondike Solitaire em Flet para o TP2 de Computacao Movel."
 readme = "README.md"

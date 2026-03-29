@@ -1,3 +1,12 @@
+"""
+Motor principal do tabuleiro de Solitaire.
+
+Este modulo contem a modelacao do estado do jogo, regras de movimento,
+pontuacao, historico de undo, restauracao de snapshots e adaptacao responsiva
+do tabuleiro. O `GameBoard` e o centro da logica do projeto: as cartas e os
+slots vivem aqui e a interface apenas orquestra o que deve ser mostrado.
+"""
+
 import copy
 import random
 from dataclasses import dataclass
@@ -19,6 +28,18 @@ UNDO_LIMIT = 150
 
 @dataclass(frozen=True)
 class Suite:
+    """
+    Descreve um naipe do baralho.
+
+    Attributes:
+        name:
+            Nome tecnico usado em IDs e assets.
+        color:
+            Cor logica do naipe para validacao de regras.
+        label:
+            Nome amigavel apresentado na documentacao.
+    """
+
     name: str
     color: str
     label: str
@@ -26,6 +47,16 @@ class Suite:
 
 @dataclass(frozen=True)
 class Rank:
+    """
+    Descreve o valor de uma carta.
+
+    Attributes:
+        name:
+            Nome textual do rank.
+        value:
+            Valor numerico usado nas comparacoes do jogo.
+    """
+
     name: str
     value: int
 
@@ -55,7 +86,33 @@ RANKS = (
 
 
 class GameBoard(ft.Stack):
+    """
+    Stack Flet que representa o tabuleiro inteiro da partida.
+
+    O tabuleiro gere:
+    - criacao de slots e cartas;
+    - distribuicao inicial;
+    - regras de movimento;
+    - historico de undo;
+    - score, cronometro e mensagens de estado;
+    - serializacao/restauro completo da partida;
+    - ajuste responsivo de layout.
+    """
+
     def __init__(self, page, settings, on_win, on_change):
+        """
+        Inicializa o tabuleiro e regista callbacks externos.
+
+        Args:
+            page:
+                Pagina Flet dona do tabuleiro.
+            settings:
+                Configuracao inicial do jogo.
+            on_win:
+                Callback disparado quando a partida termina em vitoria.
+            on_change:
+                Callback disparado sempre que o estado observavel muda.
+        """
         super().__init__()
         self.app_page = page
         self.settings = settings
@@ -85,22 +142,52 @@ class GameBoard(ft.Stack):
         self.all_slots = []
 
     def can_update(self):
+        """
+        Verifica se o controlo ainda esta ligado a uma pagina valida.
+
+        Returns:
+            `True` quando o tabuleiro pode chamar `update()` sem erro.
+        """
         try:
             return self.page is not None
         except RuntimeError:
             return False
 
     def notify_change(self, autosave=False):
+        """
+        Propaga uma alteracao para a camada exterior.
+
+        Args:
+            autosave:
+                Indica se a mudanca justifica gravacao automatica do estado.
+        """
         if self.on_change is not None:
             self.on_change(autosave=autosave)
 
     def set_status(self, message, autosave=False, update_board=False):
+        """
+        Atualiza a mensagem de estado publicada para a interface.
+
+        Args:
+            message:
+                Texto curto apresentado ao utilizador.
+            autosave:
+                Se `True`, a camada superior pode persistir a alteracao.
+            update_board:
+                Se `True`, o controlo atualiza-se imediatamente.
+        """
         self.status_message = message
         if update_board and self.can_update():
             self.update()
         self.notify_change(autosave=autosave)
 
     def setup(self):
+        """
+        Constroi a estrutura do tabuleiro na primeira utilizacao.
+
+        O metodo e idempotente: se o tabuleiro ja tiver sido preparado,
+        chamadas repetidas nao fazem nada.
+        """
         if self.is_ready:
             return
         self.create_slots()
@@ -109,6 +196,12 @@ class GameBoard(ft.Stack):
         self.start_new_game(announce=False)
 
     def create_slots(self):
+        """
+        Cria stock, waste, fundacoes e tableau.
+
+        O conjunto de slots e tambem guardado em `all_slots` para facilitar
+        resets e atualizacoes de layout.
+        """
         slot_border = ft.Border.all(1, self.settings.theme["slot_border"])
         self.stock = Slot(self, "stock", top=0, left=0, border=slot_border)
         self.waste = Slot(self, "waste", top=0, left=100, border=None)
@@ -125,6 +218,9 @@ class GameBoard(ft.Stack):
         self.apply_visual_preferences(update=False)
 
     def create_card_deck(self):
+        """
+        Gera as 52 cartas do baralho e indexa-as por ID.
+        """
         self.cards = []
         self.cards_by_id = {}
         for suite in SUITES:
@@ -135,6 +231,9 @@ class GameBoard(ft.Stack):
         self.controls.extend(self.cards)
 
     def reset_board_state(self):
+        """
+        Limpa completamente as pilhas e repoe todas as cartas a face para baixo.
+        """
         for slot in self.all_slots:
             slot.pile.clear()
         for card in self.cards:
@@ -143,6 +242,9 @@ class GameBoard(ft.Stack):
             card.turn_face_down(notify=False)
 
     def reset_game_progress(self):
+        """
+        Repoe score, cronometro, undo e passes de stock.
+        """
         self.settings.apply_difficulty(self.settings.difficulty)
         self.deck_passes_remaining = int(self.settings.deck_passes_allowed)
         self.score = STARTING_SCORE
@@ -151,6 +253,13 @@ class GameBoard(ft.Stack):
         self._game_won = False
 
     def start_new_game(self, announce=True):
+        """
+        Inicia uma nova partida a partir de um baralho embaralhado.
+
+        Args:
+            announce:
+                Se `True`, publica mensagem de estado visivel ao utilizador.
+        """
         self.reset_game_progress()
         self.current_seed = random.SystemRandom().randrange(1, 10_000_000)
         deck = list(self.cards)
@@ -168,6 +277,12 @@ class GameBoard(ft.Stack):
             self.notify_change(autosave=False)
 
     def restart_game(self):
+        """
+        Reinicia a partida atual para a distribuicao inicial.
+
+        Ao contrario de `start_new_game()`, este metodo nao gera uma nova seed:
+        ele restaura exatamente o primeiro estado distribuido desta ronda.
+        """
         if self.initial_snapshot is None:
             self.set_status("Nao existe uma partida para reiniciar.")
             return
@@ -180,6 +295,13 @@ class GameBoard(ft.Stack):
         self.set_status("Partida reiniciada a partir da distribuicao inicial.")
 
     def deal_cards(self, deck):
+        """
+        Distribui o baralho segundo as regras do Klondike.
+
+        Args:
+            deck:
+                Lista de cartas ja embaralhada.
+        """
         card_index = 0
         first_slot = 0
         while card_index <= 27:
@@ -193,16 +315,44 @@ class GameBoard(ft.Stack):
             card.place(self.stock)
 
     def save_undo_state(self):
+        """
+        Guarda um snapshot para permitir `undo`.
+
+        O historico e truncado a `UNDO_LIMIT` para evitar crescimento sem fim.
+        """
         self.history.append(self.capture_state(include_initial=False))
         if len(self.history) > UNDO_LIMIT:
             self.history.pop(0)
 
     def handle_tableau_reveal(self, notify=False):
+        """
+        Aplica os efeitos secundarios de revelar uma carta do tableau.
+
+        Args:
+            notify:
+                Se `True`, publica mensagem de estado imediata.
+        """
         self.score += 5
         if notify:
             self.set_status("Carta revelada no tableau.")
 
     def finish_move(self, old_slot, new_slot):
+        """
+        Fecha um movimento bem-sucedido entre slots.
+
+        Responsabilidades:
+        - revelar nova carta do tableau, quando aplicavel;
+        - atualizar waste visivel;
+        - aplicar score;
+        - verificar vitoria;
+        - disparar autosave e callback de vitoria.
+
+        Args:
+            old_slot:
+                Slot de origem.
+            new_slot:
+                Slot de destino.
+        """
         if old_slot.type == "tableau" and old_slot.pile:
             old_slot.get_top_card().turn_face_up()
             self.handle_tableau_reveal()
@@ -219,6 +369,9 @@ class GameBoard(ft.Stack):
             self.on_win()
 
     def undo_move(self):
+        """
+        Restaura o ultimo snapshot do historico.
+        """
         if not self.history:
             self.set_status("Nao ha jogadas para desfazer.")
             return
@@ -227,6 +380,16 @@ class GameBoard(ft.Stack):
         self.set_status("Ultima jogada desfeita.", autosave=True)
 
     def capture_state(self, include_initial=True):
+        """
+        Serializa o estado completo do tabuleiro.
+
+        Args:
+            include_initial:
+                Se `True`, inclui tambem a distribuicao inicial da ronda.
+
+        Returns:
+            Dicionario pronto para persistencia local ou DuckDB.
+        """
         state = {
             "version": 2,
             "settings": self.settings.to_dict(),
@@ -246,6 +409,19 @@ class GameBoard(ft.Stack):
         return state
 
     def restore_state(self, snapshot, clear_history=False, set_initial=False, announce=True):
+        """
+        Restaura o tabuleiro a partir de um snapshot persistido.
+
+        Args:
+            snapshot:
+                Dicionario produzido por `capture_state()`.
+            clear_history:
+                Se `True`, apaga o historico de undo apos o restauro.
+            set_initial:
+                Se `True`, redefine tambem a snapshot inicial da ronda.
+            announce:
+                Se `True`, publica mensagem de estado ao utilizador.
+        """
         restored_settings = Settings.from_dict(snapshot.get("settings", {}))
         restored_settings.card_back_name = self.settings.card_back_name
         restored_settings.theme_name = self.settings.theme_name
@@ -295,6 +471,9 @@ class GameBoard(ft.Stack):
             self.notify_change()
 
     def draw_from_stock(self):
+        """
+        Compra cartas do stock para a waste.
+        """
         if not self.stock.pile:
             self.set_status("O stock esta vazio.")
             return
@@ -310,6 +489,9 @@ class GameBoard(ft.Stack):
         self.notify_change(autosave=True)
 
     def recycle_waste_to_stock(self):
+        """
+        Recicla a waste de volta para o stock.
+        """
         self.waste.pile.reverse()
         while self.waste.pile:
             card = self.waste.pile[0]
@@ -319,6 +501,12 @@ class GameBoard(ft.Stack):
         self.notify_change(autosave=True)
 
     def move_on_top(self, cards_to_drag, update=True):
+        """
+        Move cartas para o topo visual do stack.
+
+        Isto garante que as cartas arrastadas ficam sempre visiveis acima das
+        restantes durante a interacao.
+        """
         for card in cards_to_drag:
             if card in self.controls:
                 self.controls.remove(card)
@@ -327,6 +515,9 @@ class GameBoard(ft.Stack):
             self.update()
 
     def bounce_back(self, cards):
+        """
+        Reposiciona cartas arrastadas para a localizacao original.
+        """
         for index, card in enumerate(cards):
             card.top = self.current_top
             if card.slot.type == "tableau":
@@ -334,6 +525,13 @@ class GameBoard(ft.Stack):
             card.left = self.current_left
 
     def display_waste(self, update=True):
+        """
+        Atualiza a apresentacao das cartas da waste.
+
+        O numero de cartas visiveis depende da dificuldade. Quando a compra e
+        de tres cartas, as cartas visiveis recebem um pequeno deslocamento
+        horizontal para simular o leque classico.
+        """
         visible_count = 2 if self.settings.waste_size == 1 else self.settings.waste_size
         visible_cards = self.waste.get_top_cards(visible_count)
         first_visible = len(self.waste.pile) - len(visible_cards)
@@ -350,6 +548,13 @@ class GameBoard(ft.Stack):
             self.update()
 
     def auto_win(self):
+        """
+        Forca o tabuleiro para um estado de vitoria.
+
+        A funcionalidade e usada pelo gesto de shake. O metodo guarda undo,
+        move logicamente todas as cartas para as fundacoes, marca a partida
+        como vencida e dispara o callback de comemoracao.
+        """
         if self._game_won:
             return
 
@@ -372,11 +577,20 @@ class GameBoard(ft.Stack):
             announce=False,
         )
         self._game_won = True
-        self.set_status("Vitória automática ativada.", autosave=True)
+        self.set_status("Vitoria automatica ativada.", autosave=True)
         if self.on_win is not None:
             self.on_win()
 
     def apply_score_for_move(self, source_type, target_type):
+        """
+        Aplica as regras de score para um movimento concluido.
+
+        Args:
+            source_type:
+                Tipo do slot de origem.
+            target_type:
+                Tipo do slot de destino.
+        """
         if target_type == "foundation" and source_type in ("waste", "tableau"):
             self.score += 10
         elif target_type == "tableau" and source_type == "waste":
@@ -385,6 +599,12 @@ class GameBoard(ft.Stack):
             self.score -= 15
 
     def check_foundation_rules(self, current_card, top_card=None):
+        """
+        Valida se uma carta pode entrar numa fundacao.
+
+        Returns:
+            `True` se a jogada cumprir as regras do Klondike.
+        """
         if top_card is not None:
             return (
                 current_card.suite.name == top_card.suite.name
@@ -393,6 +613,12 @@ class GameBoard(ft.Stack):
         return current_card.rank.name == "Ace"
 
     def check_tableau_rules(self, current_card, top_card=None):
+        """
+        Valida se uma carta pode ser colocada no tableau.
+
+        Returns:
+            `True` se a carta alternar cor e descer exatamente um valor.
+        """
         if top_card is not None:
             return (
                 current_card.suite.color != top_card.suite.color
@@ -401,9 +627,21 @@ class GameBoard(ft.Stack):
         return current_card.rank.name == "King"
 
     def check_if_you_won(self):
+        """
+        Verifica se as quatro fundacoes ja contem as 52 cartas.
+
+        Returns:
+            `True` quando a partida foi concluida.
+        """
         return sum(len(slot.pile) for slot in self.foundation) == 52
 
     def format_elapsed(self):
+        """
+        Formata o cronometro acumulado para apresentacao.
+
+        Returns:
+            String no formato `MM:SS` ou `HH:MM:SS`.
+        """
         minutes, seconds = divmod(self.elapsed_seconds, 60)
         hours, minutes = divmod(minutes, 60)
         if hours > 0:
@@ -411,6 +649,15 @@ class GameBoard(ft.Stack):
         return f"{minutes:02d}:{seconds:02d}"
 
     def apply_visual_preferences(self, update=True):
+        """
+        Recalcula dimensoes e coordenadas conforme o tamanho da pagina.
+
+        Este metodo torna o tabuleiro responsivo, adaptando:
+        - largura/altura das cartas;
+        - offset vertical do tableau;
+        - distancia entre colunas;
+        - dimensao total do stack.
+        """
         page_w = max(300, int(self.app_page.width or 700))
         page_h = max(560, int(self.app_page.height or 900))
         avail = max(280, page_w - 48)
@@ -484,4 +731,7 @@ class GameBoard(ft.Stack):
             self.update()
 
     def refresh_layout(self, update=True):
+        """
+        Atalho semantico para reaplicar o layout responsivo.
+        """
         self.apply_visual_preferences(update=update)

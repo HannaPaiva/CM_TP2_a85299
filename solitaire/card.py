@@ -1,3 +1,16 @@
+"""
+Componente visual e interativo de cada carta do jogo.
+
+O objeto `Card` acumula duas responsabilidades principais:
+
+1. representar a carta no ecra como um `GestureDetector`;
+2. servir de ponte entre os gestos do utilizador e a logica do `GameBoard`.
+
+Cada carta conhece o naipe, o rank, o slot em que se encontra e o seu estado
+de face para cima/baixo, o que permite tratar drag-and-drop, clique simples,
+duplo clique e restauracao a partir de snapshots.
+"""
+
 import flet as ft
 
 try:
@@ -5,8 +18,29 @@ try:
 except ImportError:
     from settings import BACK_OPTIONS
 
+
 class Card(ft.GestureDetector):
+    """
+    Representa uma carta individual do baralho no tabuleiro.
+
+    A carta e simultaneamente um elemento visual e uma unidade de estado.
+    Quando arrastada, clicada ou restaurada a partir de persistencia, a carta
+    atualiza a propria imagem e notifica o tabuleiro atraves dos metodos de
+    apoio.
+    """
+
     def __init__(self, solitaire, suite, rank):
+        """
+        Constroi a carta e liga os handlers de gesto.
+
+        Args:
+            solitaire:
+                Referencia ao `GameBoard` que gere a partida.
+            suite:
+                Objeto `Suite` que identifica o naipe da carta.
+            rank:
+                Objeto `Rank` que identifica o valor da carta.
+        """
         super().__init__()
         self.solitaire = solitaire
         self.suite = suite
@@ -31,6 +65,13 @@ class Card(ft.GestureDetector):
         self.apply_image_preferences()
 
     def apply_image_preferences(self):
+        """
+        Ajusta `fit` e `scale` da imagem da carta.
+
+        Quando a carta esta virada para cima, a imagem da face usa o tamanho
+        natural. Quando esta virada para baixo, o metodo le as preferencias do
+        verso selecionado para manter consistencia visual com o tema ativo.
+        """
         image = self.content.content
         if self.face_up:
             image.fit = None
@@ -52,6 +93,13 @@ class Card(ft.GestureDetector):
         image.scale = max(0.85, min(1.75, scale))
 
     def sync_size(self):
+        """
+        Reajusta dimensoes da carta apos alteracoes de layout responsivo.
+
+        O tabuleiro recalcula `card_width`, `card_height` e `card_offset`
+        sempre que a janela muda de tamanho. Este metodo propaga esses novos
+        valores para a carta e para a imagem interna.
+        """
         self.content.width = self.solitaire.card_width
         self.content.height = self.solitaire.card_height
         self.content.border_radius = ft.BorderRadius.all(6)
@@ -60,6 +108,16 @@ class Card(ft.GestureDetector):
         self.apply_image_preferences()
 
     def set_face(self, face_up, notify=True):
+        """
+        Troca explicitamente o estado da face da carta.
+
+        Args:
+            face_up:
+                `True` para mostrar a frente da carta, `False` para mostrar o
+                verso configurado.
+            notify:
+                Se `True`, o tabuleiro sera atualizado no fim da operacao.
+        """
         self.face_up = bool(face_up)
         if self.face_up:
             self.content.content.src = f"images/{self.card_id}.svg"
@@ -70,12 +128,37 @@ class Card(ft.GestureDetector):
             self.solitaire.update()
 
     def turn_face_up(self, notify=True):
+        """
+        Atalho semantico para virar a carta para cima.
+
+        Args:
+            notify:
+                Indica se o tabuleiro deve ser atualizado imediatamente.
+        """
         self.set_face(True, notify=notify)
 
     def turn_face_down(self, notify=True):
+        """
+        Atalho semantico para virar a carta para baixo.
+
+        Args:
+            notify:
+                Indica se o tabuleiro deve ser atualizado imediatamente.
+        """
         self.set_face(False, notify=notify)
 
     def can_be_moved(self):
+        """
+        Determina se a carta pode ser movida no estado atual.
+
+        Regras aplicadas:
+        - cartas viradas para cima no tableau podem ser movidas;
+        - na waste, apenas a carta do topo e movivel;
+        - cartas sem slot nao participam em interacao.
+
+        Returns:
+            `True` se a carta puder iniciar movimento; caso contrario `False`.
+        """
         if self.slot is None:
             return False
         if self.face_up and self.slot.type != "waste":
@@ -85,12 +168,26 @@ class Card(ft.GestureDetector):
         return False
 
     def start_drag(self, e: ft.DragStartEvent):
+        """
+        Inicia o arrasto da carta e do bloco associado.
+
+        Para cartas do tableau, o arrasto pode incluir a carta selecionada e
+        todas as cartas abaixo dela. O metodo memoriza tambem a posicao inicial
+        para permitir o efeito de `bounce back` caso o drop seja invalido.
+        """
         if self.can_be_moved():
             self._dragging_cards = self.get_cards_to_move()
             self.solitaire.current_top = e.control.top
             self.solitaire.current_left = e.control.left
 
     def drag(self, e: ft.DragUpdateEvent):
+        """
+        Atualiza a posicao das cartas durante o arrasto.
+
+        Args:
+            e:
+                Evento de arrasto emitido pelo Flet, contendo o delta local.
+        """
         if self.can_be_moved():
             for card in self._dragging_cards:
                 card.top = max(0, card.top + e.local_delta.y)
@@ -98,6 +195,14 @@ class Card(ft.GestureDetector):
                 card.update()
 
     def drop(self, e: ft.DragEndEvent):
+        """
+        Finaliza o arrasto e tenta aplicar um movimento valido.
+
+        O metodo percorre tableau e fundacoes, verifica proximidade visual e
+        valida as regras de colocacao. Quando encontra um alvo valido, guarda o
+        estado para `undo`, move as cartas e delega o fecho do movimento ao
+        tabuleiro. Se nenhum alvo servir, devolve as cartas a posicao inicial.
+        """
         if self.can_be_moved():
             cards_to_drag = self._dragging_cards
             self.solitaire.move_on_top(cards_to_drag)
@@ -125,6 +230,13 @@ class Card(ft.GestureDetector):
             self._dragging_cards = []
 
     def doubleclick(self, e):
+        """
+        Tenta mover automaticamente a carta para uma fundacao.
+
+        O duplo clique e suportado para cartas viradas para cima vindas da
+        waste ou do tableau. Se nenhuma fundacao aceitar a carta, o estado de
+        undo que tinha sido criado e removido para nao poluir o historico.
+        """
         if self.slot is not None and self.slot.type in ("waste", "tableau"):
             if self.face_up:
                 self.solitaire.save_undo_state()
@@ -138,6 +250,13 @@ class Card(ft.GestureDetector):
                 self.solitaire.history.pop() if self.solitaire.history else None
 
     def click(self, e):
+        """
+        Trata o clique simples sobre a carta.
+
+        Comportamentos suportados:
+        - clique na carta do stock compra cartas;
+        - clique na ultima carta tapada do tableau revela-a.
+        """
         if self.slot is None:
             return
         if self.slot.type == "stock":
@@ -149,6 +268,18 @@ class Card(ft.GestureDetector):
                 self.solitaire.handle_tableau_reveal()
 
     def place(self, slot):
+        """
+        Coloca a carta num novo slot e atualiza coordenadas.
+
+        Este metodo e usado tanto em movimentos interativos quanto em
+        restauracao de snapshots. A logica inclui reposicionamento no tableau,
+        remocao do slot anterior, insercao no novo slot e reordenacao no topo
+        visual do `Stack`.
+
+        Args:
+            slot:
+                Novo slot de destino.
+        """
         self.top = slot.top
         self.left = slot.left
         if slot.type == "tableau":
@@ -166,6 +297,13 @@ class Card(ft.GestureDetector):
             self.solitaire.update()
 
     def get_cards_to_move(self):
+        """
+        Resolve o conjunto de cartas que acompanha esta carta num arrasto.
+
+        Returns:
+            Se a carta estiver no tableau, devolve a subpilha a partir dela.
+            Caso contrario, devolve apenas a propria carta.
+        """
         if self.slot is not None:
             return self.slot.pile[self.slot.pile.index(self) :]
         return [self]
