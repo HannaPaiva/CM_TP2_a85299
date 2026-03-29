@@ -24,6 +24,7 @@ from solitaire.settings import (
 from solitaire.storage import GameStorage
 
 LOCAL_GAME_STATE_KEY = "solitaire.game_state.v2"
+VISUAL_SETTINGS_KEY = "solitaire.visual_settings.v1"
 
 # Presets that pair a card back with its matching table theme
 VISUAL_PRESETS = [
@@ -837,6 +838,21 @@ def main(page: ft.Page):
             pass
         page.run_task(autosave_current_state)
 
+    async def save_visual_settings_async():
+        data = {
+            "card_back_name": settings.card_back_name,
+            "theme_name": settings.theme_name,
+        }
+        try:
+            preferences = ft.SharedPreferences()
+            await preferences.set(VISUAL_SETTINGS_KEY, json.dumps(data))
+        except Exception:
+            pass
+        try:
+            storage.save_visual_settings(data)
+        except Exception:
+            pass
+
     def navigate(route: str):
         current_route = page.route or "/intro"
         if current_route == "/game" and route == "/intro":
@@ -977,6 +993,7 @@ def main(page: ft.Page):
         settings.theme_name = draft_theme_name
         board.settings = settings
         sync_board_visuals(update=False)
+        page.run_task(save_visual_settings_async)
         if refresh_route:
             render_route(page.route or "/config")
 
@@ -1073,15 +1090,43 @@ def main(page: ft.Page):
                     snapshot = json.loads(raw_state)
             except Exception:
                 pass
-        if snapshot is None:
+        if snapshot is not None:
+            board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
+            settings = board.settings
+            selected_game_mode = settings.game_mode
+            draft_card_back_name = settings.card_back_name
+            draft_theme_name = settings.theme_name
+            sync_board_visuals(update=False)
+            board.set_status("Partida anterior carregada.")
+            render_route(page.route or "/intro")
             return
-        board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
-        settings = board.settings
-        selected_game_mode = settings.game_mode
-        draft_card_back_name = settings.card_back_name
-        draft_theme_name = settings.theme_name
+
+        # No game saved — try to restore the last visual settings
+        visual = None
+        try:
+            visual = storage.load_visual_settings()
+        except Exception:
+            pass
+        if visual is None:
+            try:
+                preferences = ft.SharedPreferences()
+                raw_visual = await preferences.get(VISUAL_SETTINGS_KEY)
+                if raw_visual:
+                    visual = json.loads(raw_visual)
+            except Exception:
+                pass
+        if visual is None:
+            return
+        back = visual.get("card_back_name", "classic")
+        theme_v = visual.get("theme_name", "classic")
+        from solitaire.settings import BACK_OPTIONS as _BA, THEME_OPTIONS as _TO
+        if back in _BA:
+            settings.card_back_name = back
+            draft_card_back_name = back
+        if theme_v in _TO:
+            settings.theme_name = theme_v
+            draft_theme_name = theme_v
         sync_board_visuals(update=False)
-        board.set_status("Partida anterior carregada.")
         render_route(page.route or "/intro")
 
     def start_new_game_from_intro(e):
@@ -1929,8 +1974,41 @@ def main(page: ft.Page):
     def build_config_view():
         theme = effective_theme()
 
+        # "Restore default back" — visible when active back ≠ theme's matching back
+        def reset_back_to_default(_e):
+            nonlocal draft_card_back_name
+            draft_card_back_name = draft_theme_name
+            apply_visual_draft()
+
+        default_back_available = draft_theme_name in BACK_OPTIONS
+        back_mismatch = draft_card_back_name != draft_theme_name and default_back_available
+        default_back_label = BACK_OPTIONS[draft_theme_name]["label"] if default_back_available else ""
+
+        reset_chip = ft.Container(
+            on_click=reset_back_to_default,
+            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+            border_radius=ft.BorderRadius.all(999),
+            bgcolor=theme["chip_bg"],
+            border=ft.Border.all(1.2, theme["slot_border"]),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(ft.Icons.REFRESH, size=15, color=theme["accent"]),
+                    ft.Text(
+                        f"Restaurar verso padrão ({default_back_label})",
+                        size=12,
+                        color=theme["text"],
+                    ),
+                ],
+                spacing=6,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        ) if back_mismatch else None
+
         back_tiles = ft.Column(
-            controls=[
+            controls=(
+                [reset_chip] if reset_chip else []
+            ) + [
                 build_card_back_tile(name, data)
                 for name, data in BACK_OPTIONS.items()
             ],

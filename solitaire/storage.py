@@ -52,3 +52,29 @@ class GameStorage:
             return json.loads(row[0])
         finally:
             connection.close()
+
+    def save_visual_settings(self, data):
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            connection.execute("DELETE FROM game_state WHERE save_key = ?", ["visual_settings"])
+            connection.execute(
+                "INSERT INTO game_state (save_key, payload) VALUES (?, ?)",
+                ["visual_settings", json.dumps(data)],
+            )
+        finally:
+            connection.close()
+
+    def load_visual_settings(self):
+        connection = self._connect()
+        try:
+            self._ensure_schema(connection)
+            row = connection.execute(
+                "SELECT payload FROM game_state WHERE save_key = ?",
+                ["visual_settings"],
+            ).fetchone()
+            if row is None:
+                return None
+            return json.loads(row[0])
+        finally:
+            connection.close()
