@@ -384,19 +384,56 @@ class GameBoard(ft.Stack):
         return str(max(1, self.deck_passes_remaining))
 
     def apply_visual_preferences(self, update=True):
-        self.width = 1000
-        self.height = 500
+        page_w = max(300, int(self.app_page.width or 700))
+        avail = max(280, page_w - 48)
+
+        if avail >= 700:
+            self.card_width = 70
+            self.card_height = 100
+            self.card_offset = 20
+            col_unit = 100
+            tableau_top = 150
+            self.width = 1000
+            self.height = 500
+        else:
+            col_unit = avail / 7
+            self.card_width = max(28, int(col_unit * 0.86))
+            self.card_height = int(self.card_width * 10 / 7)
+            self.card_offset = max(10, int(col_unit * 0.20))
+            tableau_top = self.card_height + max(8, int(self.card_height * 0.12))
+            self.width = avail
+            self.height = tableau_top + self.card_height + 14 * self.card_offset + 20
+
+        self.stock.left = 0
+        self.stock.top = 0
+        self.waste.left = int(col_unit)
+        self.waste.top = 0
+        for i, slot in enumerate(self.foundation):
+            slot.left = int((3 + i) * col_unit)
+            slot.top = 0
+        for i, slot in enumerate(self.tableau):
+            slot.left = int(i * col_unit)
+            slot.top = tableau_top
+
         for slot in self.all_slots:
-            slot.width = 70
-            slot.height = 100
+            slot.width = self.card_width
+            slot.height = self.card_height
             slot.bgcolor = self.settings.theme["slot_bg"]
             if slot.type in ("stock", "foundation"):
                 slot.border = ft.Border.all(1, self.settings.theme["slot_border"])
             slot.border_radius = ft.BorderRadius.all(6)
+
         for card in self.cards:
             card.sync_size()
             if not card.face_up:
                 card.turn_face_down(notify=False)
+            if card.slot is not None:
+                card.left = card.slot.left
+                if card.slot.type == "tableau":
+                    card.top = card.slot.top + self.card_offset * card.slot.pile.index(card)
+                else:
+                    card.top = card.slot.top
+
         if update and self.can_update():
             self.update()
 

@@ -991,6 +991,8 @@ def main(page: ft.Page):
 
     def handle_resize(e):
         page.padding = page_padding()
+        board.apply_visual_preferences(update=False)
+        board.display_waste(update=False)
         render_route(page.route or "/intro")
 
     page.on_resize = handle_resize
@@ -999,4 +1001,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.run(main, assets_dir=str(Path(__file__).resolve().parent))
+    ft.run(main, assets_dir=str(Path(__file__).resolve().parent / "assets"))
