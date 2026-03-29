@@ -1,5 +1,10 @@
 from dataclasses import dataclass
 
+try:
+    from .custom_theme_store import load_custom_theme_bundle
+except ImportError:
+    from custom_theme_store import load_custom_theme_bundle
+
 UNLIMITED_PASSES = 1000
 
 BACK_OPTIONS = {
@@ -87,6 +92,21 @@ THEME_OPTIONS = {
         "accent": "#FFD082",
     },
 }
+
+
+def refresh_custom_theme_registry():
+    custom_backs = [name for name, data in BACK_OPTIONS.items() if data.get("custom")]
+    custom_themes = [name for name, data in THEME_OPTIONS.items() if data.get("custom")]
+    for name in custom_backs:
+        del BACK_OPTIONS[name]
+    for name in custom_themes:
+        del THEME_OPTIONS[name]
+
+    bundle = load_custom_theme_bundle()
+    for name, data in bundle.get("backs", {}).items():
+        BACK_OPTIONS[name] = data
+    for name, data in bundle.get("themes", {}).items():
+        THEME_OPTIONS[name] = data
 
 DIFFICULTY_PRESETS = {
     "easy": {
@@ -186,3 +206,6 @@ class Settings:
             settings.game_mode = "classic"
 
         return settings
+
+
+refresh_custom_theme_registry()

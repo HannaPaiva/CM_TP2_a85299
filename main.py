@@ -4,8 +4,15 @@ from pathlib import Path
 
 import flet as ft
 
+from solitaire.custom_theme_store import build_theme_palette, save_custom_theme_bundle
 from solitaire.gameboard_original import GameBoard
-from solitaire.settings import BACK_OPTIONS, GAME_MODES, Settings, THEME_OPTIONS
+from solitaire.settings import (
+    BACK_OPTIONS,
+    GAME_MODES,
+    Settings,
+    THEME_OPTIONS,
+    refresh_custom_theme_registry,
+)
 from solitaire.storage import GameStorage
 
 LOCAL_GAME_STATE_KEY = "solitaire.game_state.v2"
@@ -20,6 +27,7 @@ VISUAL_PRESETS = [
 
 
 def main(page: ft.Page):
+    refresh_custom_theme_registry()
     settings = Settings()
     storage = GameStorage()
     selected_game_mode = settings.game_mode
@@ -35,6 +43,46 @@ def main(page: ft.Page):
     passes_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
     status_text = ft.Text(size=14, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
     intro_status = ft.Text(size=13)
+    theme_studio_status = ft.Text(size=13)
+
+    studio_image_bytes = None
+    studio_image_name = None
+
+    studio_name_field = ft.TextField(
+        label="Nome do tema",
+        value="Tema Atelier",
+        hint_text="Ex.: Horizonte Neon",
+        capitalization=ft.TextCapitalization.WORDS,
+    )
+    studio_base_field = ft.TextField(
+        label="Cor base da mesa",
+        value=settings.theme["board_bg"],
+        hint_text="#1E6B42",
+    )
+    studio_surface_field = ft.TextField(
+        label="Cor dos paineis",
+        value=settings.theme["panel_bg"],
+        hint_text="#153221",
+    )
+    studio_accent_field = ft.TextField(
+        label="Cor de destaque",
+        value=settings.theme["accent"],
+        hint_text="#F1CE6E",
+    )
+    studio_light_text_switch = ft.Switch(
+        label="Texto claro",
+        value=True,
+    )
+    studio_zoom_slider = ft.Slider(
+        min=0.85,
+        max=1.75,
+        divisions=18,
+        value=1.0,
+        label="{value}x",
+    )
+
+    file_picker = ft.FilePicker()
+    page.services.append(file_picker)
 
     # --- layout helpers ---
 
@@ -73,6 +121,48 @@ def main(page: ft.Page):
 
     def effective_theme():
         return THEME_OPTIONS[effective_theme_name()]
+
+    def is_hex_color(value):
+        value = str(value or "").strip().lstrip("#")
+        return len(value) in (3, 6) and all(ch in "0123456789abcdefABCDEF" for ch in value)
+
+    def is_light_color(value):
+        raw = str(value or "").strip().lstrip("#")
+        if len(raw) == 3:
+            raw = "".join(ch * 2 for ch in raw)
+        if len(raw) != 6 or not all(ch in "0123456789abcdefABCDEF" for ch in raw):
+            return True
+        red = int(raw[0:2], 16)
+        green = int(raw[2:4], 16)
+        blue = int(raw[4:6], 16)
+        return (0.2126 * red) + (0.7152 * green) + (0.0722 * blue) >= 150
+
+    def theme_studio_palette():
+        return build_theme_palette(
+            label=studio_name_field.value or "Tema Atelier",
+            base_color=studio_base_field.value,
+            surface_color=studio_surface_field.value,
+            accent_color=studio_accent_field.value,
+            use_light_text=bool(studio_light_text_switch.value),
+        )
+
+    def available_visual_presets():
+        presets = list(VISUAL_PRESETS)
+        for back_name, back_data in BACK_OPTIONS.items():
+            if not back_data.get("custom"):
+                continue
+            theme_name = back_data.get("suggested_theme")
+            if theme_name not in THEME_OPTIONS:
+                continue
+            presets.append(
+                {
+                    "label": THEME_OPTIONS[theme_name]["label"],
+                    "back": back_name,
+                    "theme": theme_name,
+                    "icon": ft.Icons.AUTO_FIX_HIGH,
+                }
+            )
+        return presets
 
     # --- widget helpers ---
 
@@ -396,6 +486,101 @@ def main(page: ft.Page):
     def open_mode_picker(e=None):
         navigate("/mode")
 
+    def open_theme_studio(e=None):
+        nonlocal studio_image_bytes, studio_image_name
+        current_theme = settings.theme
+        studio_name_field.value = f"{current_theme['label']} Remix"
+        studio_base_field.value = current_theme["board_bg"]
+        studio_surface_field.value = current_theme["panel_bg"]
+        studio_accent_field.value = current_theme["accent"]
+        studio_light_text_switch.value = is_light_color(current_theme["text"])
+        studio_zoom_slider.value = 1.0
+        studio_image_bytes = None
+        studio_image_name = None
+        theme_studio_status.value = "Cria uma paleta, faz upload do verso e guarda o tema no projeto."
+        navigate("/theme-studio")
+
+    def preview_theme_studio(e=None):
+        theme_studio_status.value = "Preview atualizado."
+        render_route("/theme-studio")
+
+    async def pick_theme_studio_image_async():
+        nonlocal studio_image_bytes, studio_image_name
+        files = await file_picker.pick_files(
+            dialog_title="Escolhe a imagem do verso da carta",
+            file_type=ft.FilePickerFileType.IMAGE,
+            allow_multiple=False,
+            with_data=True,
+        )
+        if not files:
+            return
+
+        selected_file = files[0]
+        selected_bytes = selected_file.bytes
+        if selected_bytes is None and selected_file.path:
+            selected_bytes = Path(selected_file.path).read_bytes()
+        if not selected_bytes:
+            theme_studio_status.value = "Nao foi possivel ler a imagem escolhida."
+            render_route("/theme-studio")
+            return
+
+        studio_image_bytes = selected_bytes
+        studio_image_name = selected_file.name
+        theme_studio_status.value = f"Imagem '{studio_image_name}' pronta para o tema."
+        render_route("/theme-studio")
+
+    def choose_theme_studio_image(e=None):
+        page.run_task(pick_theme_studio_image_async)
+
+    studio_zoom_slider.on_change = preview_theme_studio
+    studio_light_text_switch.on_change = preview_theme_studio
+
+    def save_theme_studio(e=None):
+        nonlocal draft_card_back_name, draft_theme_name
+        name_value = (studio_name_field.value or "").strip()
+        if len(name_value) < 3:
+            theme_studio_status.value = "Dá um nome com pelo menos 3 caracteres ao tema."
+            render_route("/theme-studio")
+            return
+
+        invalid_fields = []
+        if not is_hex_color(studio_base_field.value):
+            invalid_fields.append("cor base")
+        if not is_hex_color(studio_surface_field.value):
+            invalid_fields.append("cor dos paineis")
+        if not is_hex_color(studio_accent_field.value):
+            invalid_fields.append("cor de destaque")
+        if invalid_fields:
+            theme_studio_status.value = (
+                "Revê os hexadecimais: " + ", ".join(invalid_fields) + "."
+            )
+            render_route("/theme-studio")
+            return
+
+        try:
+            created = save_custom_theme_bundle(
+                label=name_value,
+                base_color=studio_base_field.value,
+                surface_color=studio_surface_field.value,
+                accent_color=studio_accent_field.value,
+                use_light_text=bool(studio_light_text_switch.value),
+                image_bytes=studio_image_bytes,
+                original_filename=studio_image_name,
+                image_scale=studio_zoom_slider.value or 1.0,
+            )
+        except ValueError as exc:
+            theme_studio_status.value = str(exc)
+            render_route("/theme-studio")
+            return
+
+        refresh_custom_theme_registry()
+        draft_card_back_name = created["back_name"]
+        draft_theme_name = created["theme_name"]
+        apply_visual_draft(refresh_route=False)
+        theme_studio_status.value = f"Tema '{created['theme']['label']}' criado e aplicado."
+        navigate("/intro")
+        board.set_status(f"Tema '{created['theme']['label']}' criado.")
+
     def select_mode(e):
         nonlocal selected_game_mode
         if e.control.data in GAME_MODES:
@@ -568,6 +753,7 @@ def main(page: ft.Page):
                 if isinstance(control, ft.Icon):
                     control.color = theme["accent"]
         intro_status.color = theme["text"]
+        theme_studio_status.color = theme["text"]
 
         for text in (score_text, timer_text, passes_text):
             text.color = theme["text"]
@@ -655,6 +841,11 @@ def main(page: ft.Page):
                                 ft.Icons.CASINO,
                                 start_new_game_from_intro,
                             ),
+                            action_chip(
+                                "Criar tema",
+                                ft.Icons.BRUSH,
+                                open_theme_studio,
+                            ),
                         ],
                         wrap=True,
                         spacing=12,
@@ -736,11 +927,228 @@ def main(page: ft.Page):
             ],
         )
 
+    def build_theme_studio_view():
+        theme = effective_theme()
+        palette = theme_studio_palette()
+        preview_src = studio_image_bytes if studio_image_bytes else settings.card_back
+        preview_scale = studio_zoom_slider.value or 1.0
+        image_caption = (
+            f"Imagem atual: {studio_image_name}"
+            if studio_image_name
+            else "Faz upload de uma imagem para gravar um verso novo no projeto."
+        )
+
+        board_slots = ft.Row(
+            controls=[
+                ft.Container(
+                    width=64,
+                    height=92,
+                    border_radius=ft.BorderRadius.all(12),
+                    bgcolor=palette["slot_bg"],
+                    border=ft.Border.all(1.2, palette["slot_border"]),
+                )
+                for _ in range(3)
+            ]
+            + [
+                ft.Container(
+                    width=64,
+                    height=92,
+                    border_radius=ft.BorderRadius.all(12),
+                    bgcolor=palette["panel_bg_alt"],
+                    border=ft.Border.all(1.2, palette["slot_border"]),
+                    clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                    content=ft.Image(
+                        src=preview_src,
+                        fit=ft.BoxFit.COVER,
+                        scale=preview_scale,
+                        width=64,
+                        height=92,
+                    ),
+                )
+            ],
+            spacing=10,
+            wrap=True,
+            run_spacing=10,
+        )
+
+        live_preview = ft.Container(
+            width=panel_width(),
+            padding=20,
+            border_radius=ft.BorderRadius.all(28),
+            bgcolor=palette["page_bg"],
+            border=ft.Border.all(1.5, palette["slot_border"]),
+            shadow=make_shadow(),
+            content=ft.Column(
+                controls=[
+                    ft.Container(
+                        padding=ft.Padding.symmetric(horizontal=16, vertical=12),
+                        border_radius=ft.BorderRadius.all(18),
+                        bgcolor=palette["header_bg"],
+                        content=ft.Row(
+                            controls=[
+                                ft.Icon(ft.Icons.AUTO_AWESOME, color=palette["accent"], size=18),
+                                ft.Text(
+                                    palette["label"],
+                                    size=16,
+                                    weight=ft.FontWeight.BOLD,
+                                    color=palette["text"],
+                                ),
+                            ],
+                            spacing=10,
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+                    ),
+                    ft.Container(
+                        padding=18,
+                        border_radius=ft.BorderRadius.all(22),
+                        bgcolor=palette["panel_bg"],
+                        content=ft.Column(
+                            controls=[
+                                ft.Row(
+                                    controls=[
+                                        ft.Container(
+                                            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+                                            border_radius=ft.BorderRadius.all(999),
+                                            bgcolor=palette["chip_bg"],
+                                            content=ft.Text(
+                                                "page",
+                                                size=11,
+                                                weight=ft.FontWeight.BOLD,
+                                                color=palette["text"],
+                                            ),
+                                        ),
+                                        ft.Container(
+                                            padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+                                            border_radius=ft.BorderRadius.all(999),
+                                            bgcolor=palette["accent"],
+                                            content=ft.Text(
+                                                "accent",
+                                                size=11,
+                                                weight=ft.FontWeight.BOLD,
+                                                color=palette["page_bg"],
+                                            ),
+                                        ),
+                                    ],
+                                    spacing=10,
+                                    wrap=True,
+                                ),
+                                ft.Container(
+                                    padding=16,
+                                    border_radius=ft.BorderRadius.all(20),
+                                    bgcolor=palette["board_bg"],
+                                    content=ft.Column(
+                                        controls=[
+                                            ft.Text(
+                                                "Preview do board",
+                                                size=13,
+                                                weight=ft.FontWeight.BOLD,
+                                                color=palette["text"],
+                                            ),
+                                            board_slots,
+                                        ],
+                                        spacing=12,
+                                    ),
+                                ),
+                            ],
+                            spacing=14,
+                        ),
+                    ),
+                ],
+                spacing=14,
+            ),
+        )
+
+        creation_form = ft.Column(
+            controls=[
+                studio_name_field,
+                ft.ResponsiveRow(
+                    controls=[
+                        ft.Container(col={"xs": 12, "md": 4}, content=studio_base_field),
+                        ft.Container(col={"xs": 12, "md": 4}, content=studio_surface_field),
+                        ft.Container(col={"xs": 12, "md": 4}, content=studio_accent_field),
+                    ],
+                    run_spacing=12,
+                ),
+                studio_light_text_switch,
+            ],
+            spacing=12,
+        )
+
+        image_controls = ft.Column(
+            controls=[
+                ft.Text(image_caption, size=13, color=theme["muted"]),
+                ft.Text(
+                    f"Zoom do verso: {preview_scale:.2f}x",
+                    size=12,
+                    color=theme["text"],
+                ),
+                studio_zoom_slider,
+                ft.Row(
+                    controls=[
+                        action_chip("Escolher imagem", ft.Icons.UPLOAD_FILE, choose_theme_studio_image),
+                        action_chip("Atualizar preview", ft.Icons.VISIBILITY, preview_theme_studio),
+                    ],
+                    wrap=True,
+                    spacing=12,
+                    run_spacing=12,
+                ),
+            ],
+            spacing=12,
+        )
+
+        footer_actions = ft.Row(
+            controls=[
+                action_chip("Voltar", ft.Icons.ARROW_BACK, lambda e: navigate("/intro")),
+                action_chip("Guardar tema", ft.Icons.SAVE, save_theme_studio, tone="filled"),
+            ],
+            wrap=True,
+            spacing=12,
+            run_spacing=12,
+        )
+
+        return ft.Column(
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Column(
+                    spacing=16,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        small_banner(theme_studio_status, ft.Icons.BRUSH),
+                        surface_card(
+                            "Estudio de tema",
+                            "Cria uma nova identidade visual e guarda-a no projeto.",
+                            creation_form,
+                            ft.Icons.PALETTE,
+                        ),
+                        surface_card(
+                            "Verso da carta",
+                            "A imagem fica persistente no projeto e o slider controla o zoom do verso.",
+                            image_controls,
+                            ft.Icons.STYLE,
+                        ),
+                        surface_card(
+                            "Preview ao vivo",
+                            "O resultado passa a estar disponivel depois na intro, configuracao e jogo.",
+                            live_preview,
+                            ft.Icons.AUTO_FIX_HIGH,
+                        ),
+                        ft.Container(width=panel_width(), content=footer_actions),
+                    ],
+                )
+            ],
+        )
+
     def build_card_back_tile(back_name, data):
         selected = back_name == draft_card_back_name
         theme = effective_theme()
         border_color = theme["accent"] if selected else theme["slot_border"]
         bg_color = theme["panel_bg_alt"]
+        fit_lookup = {
+            "cover": ft.BoxFit.COVER,
+            "contain": ft.BoxFit.CONTAIN,
+            "fill": ft.BoxFit.FILL,
+        }
         preview = ft.Container(
             width=52,
             height=74,
@@ -751,7 +1159,8 @@ def main(page: ft.Page):
                 src=data["asset"],
                 width=52,
                 height=74,
-                fit=ft.BoxFit.COVER,
+                fit=fit_lookup.get(str(data.get("fit", "cover")).lower(), ft.BoxFit.COVER),
+                scale=float(data.get("scale", 1.0)),
             ),
         )
         return ft.Container(
@@ -939,7 +1348,7 @@ def main(page: ft.Page):
         )
 
         preset_tiles = ft.Column(
-            controls=[build_preset_tile(p) for p in VISUAL_PRESETS],
+            controls=[build_preset_tile(p) for p in available_visual_presets()],
             spacing=10,
             tight=True,
         )
@@ -1104,6 +1513,15 @@ def main(page: ft.Page):
                 title=ft.Text("Visual da mesa"),
             )
             page.add(safe_page(build_config_view()))
+        elif route == "/theme-studio":
+            page.appbar = ft.AppBar(
+                leading=ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=lambda e: navigate("/intro"),
+                ),
+                title=ft.Text("Criar tema"),
+            )
+            page.add(safe_page(build_theme_studio_view()))
         elif route == "/mode":
             page.appbar = ft.AppBar(
                 leading=ft.IconButton(

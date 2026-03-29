@@ -1,0 +1,30 @@
+{
+  "themes": {
+    "mariana_de_banana": {
+      "label": "Mariana De Banana",
+      "page_bg": "#07180F",
+      "header_bg": "#102619",
+      "panel_bg": "#132E1E",
+      "panel_bg_alt": "#284233",
+      "board_bg": "#1E6B42",
+      "board_bg_alt": "#195836",
+      "chip_bg": "#194A2F",
+      "slot_bg": "#397D59",
+      "slot_border": "#F4D788",
+      "text": "#F7F7F2",
+      "muted": "#BAD0C1",
+      "accent": "#F1CE6E",
+      "custom": true
+    }
+  },
+  "backs": {
+    "mariana_de_banana": {
+      "label": "Mariana De Banana",
+      "asset": "backs/custom/mariana_de_banana.jpg",
+      "suggested_theme": "mariana_de_banana",
+      "fit": "cover",
+      "scale": 1.0,
+      "custom": true
+    }
+  }
+}

@@ -1,5 +1,10 @@
 import flet as ft
 
+try:
+    from .settings import BACK_OPTIONS
+except ImportError:
+    from settings import BACK_OPTIONS
+
 class Card(ft.GestureDetector):
     def __init__(self, solitaire, suite, rank):
         super().__init__()
@@ -23,6 +28,28 @@ class Card(ft.GestureDetector):
             border_radius=ft.BorderRadius.all(6),
             content=ft.Image(src=self.solitaire.settings.card_back),
         )
+        self.apply_image_preferences()
+
+    def apply_image_preferences(self):
+        image = self.content.content
+        if self.face_up:
+            image.fit = None
+            image.scale = 1.0
+            return
+
+        back_data = BACK_OPTIONS.get(self.solitaire.settings.card_back_name, {})
+        fit_name = str(back_data.get("fit", "cover")).lower()
+        fit_lookup = {
+            "cover": ft.BoxFit.COVER,
+            "contain": ft.BoxFit.CONTAIN,
+            "fill": ft.BoxFit.FILL,
+        }
+        image.fit = fit_lookup.get(fit_name, ft.BoxFit.COVER)
+        try:
+            scale = float(back_data.get("scale", 1.0))
+        except (TypeError, ValueError):
+            scale = 1.0
+        image.scale = max(0.85, min(1.75, scale))
 
     def sync_size(self):
         self.content.width = self.solitaire.card_width
@@ -30,7 +57,7 @@ class Card(ft.GestureDetector):
         self.content.border_radius = ft.BorderRadius.all(6)
         self.content.content.width = self.solitaire.card_width
         self.content.content.height = self.solitaire.card_height
-        self.content.content.fit = None
+        self.apply_image_preferences()
 
     def set_face(self, face_up, notify=True):
         self.face_up = bool(face_up)
@@ -38,6 +65,7 @@ class Card(ft.GestureDetector):
             self.content.content.src = f"images/{self.card_id}.svg"
         else:
             self.content.content.src = self.solitaire.settings.card_back
+        self.apply_image_preferences()
         if notify and self.solitaire.can_update():
             self.solitaire.update()
 
