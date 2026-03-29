@@ -304,8 +304,6 @@ def main(page: ft.Page):
             intro_status.update()
         except Exception:
             pass
-        if autosave:
-            page.run_task(save_game)
 
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.setup()
@@ -330,7 +328,37 @@ def main(page: ft.Page):
         ),
     )
 
+    def sync_board_visuals(update=True):
+        board.settings = settings
+        board.apply_visual_preferences(update=False)
+        board.display_waste(update=False)
+        if update and board.can_update():
+            board.update()
+
+    async def autosave_current_state():
+        snapshot = board.capture_state(include_initial=True)
+        try:
+            preferences = ft.SharedPreferences()
+            await preferences.set(LOCAL_GAME_STATE_KEY, json.dumps(snapshot))
+        except Exception:
+            pass
+        try:
+            storage.save_game(snapshot)
+        except Exception:
+            pass
+
+    def autosave_current_state_sync():
+        snapshot = board.capture_state(include_initial=True)
+        try:
+            storage.save_game(snapshot)
+        except Exception:
+            pass
+        page.run_task(autosave_current_state)
+
     def navigate(route: str):
+        current_route = page.route or "/intro"
+        if current_route == "/game" and route == "/intro":
+            autosave_current_state_sync()
         page.route = route
         render_route(route)
 
@@ -431,8 +459,8 @@ def main(page: ft.Page):
         selected_game_mode = settings.game_mode
         draft_card_back_name = settings.card_back_name
         draft_theme_name = settings.theme_name
-        apply_page_theme()
-        page.update()
+        sync_board_visuals(update=False)
+        render_route(page.route or "/intro")
         board.set_status("Partida carregada.")
         return True
 
@@ -463,7 +491,7 @@ def main(page: ft.Page):
         selected_game_mode = settings.game_mode
         draft_card_back_name = settings.card_back_name
         draft_theme_name = settings.theme_name
-        apply_page_theme()
+        sync_board_visuals(update=False)
         board.set_status("Partida anterior carregada.")
         render_route(page.route or "/intro")
 
@@ -494,12 +522,16 @@ def main(page: ft.Page):
     def load_clicked(e):
         page.run_task(load_game)
 
+    def handle_close(e):
+        current_route = page.route or "/intro"
+        if current_route == "/game":
+            autosave_current_state_sync()
+
     def apply_config(e=None):
         settings.card_back_name = draft_card_back_name
         settings.theme_name = draft_theme_name
         board.settings = settings
-        board.apply_visual_preferences(update=True)
-        apply_page_theme()
+        sync_board_visuals(update=False)
         navigate(config_return_route)
         board.set_status("Visual atualizado.")
 
@@ -1017,6 +1049,7 @@ def main(page: ft.Page):
                         game_action_button(ft.Icons.CASINO, "Novo jogo", new_game),
                         game_action_button(ft.Icons.RESTART_ALT, "Reiniciar", restart),
                         game_action_button(ft.Icons.UNDO, "Desfazer", undo),
+                        game_action_button(ft.Icons.DOWNLOAD, "Carregar", load_clicked),
                     ],
                 ),
             ],
@@ -1097,6 +1130,7 @@ def main(page: ft.Page):
         render_route(page.route or "/intro")
 
     page.on_resize = handle_resize
+    page.on_close = handle_close
     page.run_task(run_timer)
     navigate("/intro")
     page.run_task(auto_load_on_start)
