@@ -318,8 +318,25 @@ class GameBoard(ft.Stack):
             i += 1
 
     def display_waste(self, update=True):
-        if self.settings.waste_size == 3:
-            self.waste.fan_top_three()
+        visible_count = self.settings.waste_size
+        if visible_count == 1:
+            visible_count = 2
+
+        visible_cards = self.waste.get_top_cards(visible_count)
+        first_visible = len(self.waste.pile) - len(visible_cards)
+
+        for index, card in enumerate(self.waste.pile):
+            card.top = self.waste.top
+            if index >= first_visible:
+                card.left = self.waste.left
+                if self.settings.waste_size == 3:
+                    card.left += self.card_offset * (index - first_visible)
+                card.visible = True
+            else:
+                card.left = self.waste.left
+                card.visible = False
+
+        self.move_on_top(visible_cards, update=False)
         if update and self.can_update():
             self.update()
 
