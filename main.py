@@ -17,33 +17,232 @@ def main(page: ft.Page):
     selected_game_mode = settings.game_mode
     config_return_route = "/intro"
 
-    page.title = "Solitaire"
-    page.padding = 20
+    page.title = "Paciência"
     page.scroll = ft.ScrollMode.AUTO
 
-    score_text = ft.Text(size=14, weight=ft.FontWeight.BOLD)
-    timer_text = ft.Text(size=14, weight=ft.FontWeight.BOLD)
-    passes_text = ft.Text(size=14, weight=ft.FontWeight.BOLD)
+    score_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
+    timer_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
+    passes_text = ft.Text(size=18, weight=ft.FontWeight.BOLD)
     status_text = ft.Text(size=14)
-
-    intro_title = ft.Text("Solitaire", size=28, weight=ft.FontWeight.BOLD)
-    intro_subtitle = ft.Text(
-        "Escolhe o modo da proxima partida e entra no jogo sem mexer na gameplay.",
-        size=13,
-    )
-    intro_mode_note = ft.Text(
-        "Waste fixo em 1 carta. O game mode altera apenas a pontuacao da nova partida.",
-        size=13,
-    )
-    intro_mode_description = ft.Text(size=13)
-    intro_theme_summary = ft.Text(size=13)
     intro_status = ft.Text(size=13)
 
-    config_title = ft.Text("Configuracao", size=24, weight=ft.FontWeight.BOLD)
-    config_subtitle = ft.Text(
-        "Aqui mudas apenas o visual da janela e o back das cartas.",
-        size=13,
-    )
+    # --- layout helpers ---
+
+    def page_width():
+        return max(360, int(page.width or 390))
+
+    def page_padding():
+        width = page_width()
+        if width < 420:
+            return 10
+        if width < 760:
+            return 14
+        return 20
+
+    def is_narrow():
+        return page_width() < 760
+
+    def panel_width(max_width=880):
+        return None if is_narrow() else min(max_width, page_width() - 40)
+
+    def make_shadow():
+        return ft.BoxShadow(
+            spread_radius=0,
+            blur_radius=26,
+            color="#33000000",
+            offset=ft.Offset(0, 10),
+        )
+
+    # --- widget helpers (intro menu) ---
+
+    def compact_info(label, value, icon, on_click=None, hint=None):
+        theme = settings.theme
+        return ft.Container(
+            on_click=on_click,
+            padding=14,
+            border_radius=ft.BorderRadius.all(20),
+            bgcolor=theme["panel_bg_alt"] if on_click else "#22FFFFFF",
+            border=(
+                ft.Border.all(1.2, theme["slot_border"])
+                if on_click
+                else None
+            ),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(icon, size=18, color=theme["text"]),
+                    ft.Column(
+                        controls=[
+                            ft.Text(label, size=11, color=theme["muted"]),
+                            ft.Text(
+                                value,
+                                size=14,
+                                weight=ft.FontWeight.BOLD,
+                                color=theme["text"],
+                            ),
+                            *(
+                                [ft.Text(hint, size=11, color=theme["muted"])]
+                                if hint
+                                else []
+                            ),
+                        ],
+                        spacing=2,
+                        tight=True,
+                    ),
+                    *(
+                        [ft.Icon(ft.Icons.CHEVRON_RIGHT, size=18, color=theme["accent"])]
+                        if on_click
+                        else []
+                    ),
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def action_chip(label, icon, on_click, tone="soft"):
+        theme = settings.theme
+        filled = tone == "filled"
+        return ft.Container(
+            on_click=on_click,
+            padding=ft.Padding.symmetric(horizontal=16, vertical=12),
+            border_radius=ft.BorderRadius.all(999),
+            bgcolor=theme["accent"] if filled else theme["panel_bg_alt"],
+            border=ft.Border.all(
+                1.2,
+                theme["accent"] if filled else theme["slot_border"],
+            ),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(
+                        icon,
+                        size=18,
+                        color=theme["page_bg"] if filled else theme["accent"],
+                    ),
+                    ft.Text(
+                        label,
+                        size=14,
+                        weight=ft.FontWeight.W_600,
+                        color=theme["page_bg"] if filled else theme["text"],
+                    ),
+                ],
+                spacing=8,
+                tight=True,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def small_banner(text_control, icon):
+        theme = settings.theme
+        return ft.Container(
+            width=panel_width(960),
+            padding=16,
+            border_radius=ft.BorderRadius.all(22),
+            bgcolor=theme["panel_bg"],
+            border=ft.Border.all(1.2, theme["slot_border"]),
+            content=ft.Row(
+                controls=[
+                    ft.Icon(icon, size=18, color=theme["accent"]),
+                    text_control,
+                ],
+                spacing=10,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+        )
+
+    def surface_card(title, subtitle, content, icon):
+        theme = settings.theme
+        header = ft.Row(
+            controls=[
+                ft.Container(
+                    width=42,
+                    height=42,
+                    border_radius=ft.BorderRadius.all(14),
+                    bgcolor=theme["chip_bg"],
+                    alignment=ft.Alignment(0, 0),
+                    content=ft.Icon(icon, color=theme["accent"], size=22),
+                ),
+                ft.Column(
+                    controls=[
+                        ft.Text(
+                            title,
+                            size=20,
+                            weight=ft.FontWeight.BOLD,
+                            color=theme["text"],
+                        ),
+                        ft.Text(subtitle, size=13, color=theme["muted"]),
+                    ],
+                    spacing=2,
+                    tight=True,
+                ),
+            ],
+            spacing=12,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        return ft.Container(
+            width=panel_width(),
+            padding=20 if is_narrow() else 24,
+            border_radius=ft.BorderRadius.all(28),
+            bgcolor=theme["panel_bg"],
+            border=ft.Border.all(1.5, theme["slot_border"]),
+            shadow=make_shadow(),
+            content=ft.Column(controls=[header, content], spacing=18, tight=True),
+        )
+
+    def option_tile(title, subtitle, selected, icon, on_click, data=None, media=None):
+        theme = settings.theme
+        title_color = theme["page_bg"] if selected else theme["text"]
+        subtitle_color = theme["page_bg"] if selected else theme["muted"]
+        icon_color = theme["page_bg"] if selected else theme["accent"]
+        controls = []
+        if media is not None:
+            controls.append(media)
+        controls.append(
+            ft.Row(
+                controls=[
+                    ft.Container(
+                        width=38,
+                        height=38,
+                        border_radius=ft.BorderRadius.all(12),
+                        bgcolor="#22FFFFFF" if selected else theme["chip_bg"],
+                        alignment=ft.Alignment(0, 0),
+                        content=ft.Icon(icon, size=20, color=icon_color),
+                    ),
+                    ft.Column(
+                        controls=[
+                            ft.Text(
+                                title,
+                                size=16,
+                                weight=ft.FontWeight.BOLD,
+                                color=title_color,
+                            ),
+                            ft.Text(subtitle, size=12, color=subtitle_color),
+                        ],
+                        spacing=2,
+                        tight=True,
+                        expand=True,
+                    ),
+                    ft.Icon(
+                        ft.Icons.CHECK_CIRCLE if selected else ft.Icons.RADIO_BUTTON_UNCHECKED,
+                        size=20,
+                        color=icon_color,
+                    ),
+                ],
+                spacing=12,
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            )
+        )
+        return ft.Container(
+            data=data,
+            on_click=on_click,
+            padding=16,
+            width=None if is_narrow() else 260,
+            border_radius=ft.BorderRadius.all(24),
+            bgcolor=theme["accent"] if selected else theme["panel_bg_alt"],
+            border=ft.Border.all(1.5, theme["accent"] if selected else theme["slot_border"]),
+            content=ft.Column(controls=controls, spacing=14, tight=True),
+        )
+
+    # --- radio groups (used by config panel) ---
 
     back_group = ft.RadioGroup(
         content=ft.Column(
@@ -60,16 +259,6 @@ def main(page: ft.Page):
             controls=[
                 ft.Radio(value=name, label=data["label"])
                 for name, data in THEME_OPTIONS.items()
-            ],
-            spacing=6,
-            tight=True,
-        )
-    )
-    mode_group = ft.RadioGroup(
-        content=ft.Column(
-            controls=[
-                ft.Radio(value=name, label=data["label"])
-                for name, data in GAME_MODES.items()
             ],
             spacing=6,
             tight=True,
@@ -105,16 +294,6 @@ def main(page: ft.Page):
 
     board_frame = ft.Container(content=board, bgcolor=settings.theme["board_bg"], padding=12)
 
-    def sync_intro_controls():
-        intro_mode = selected_game_mode if selected_game_mode in GAME_MODES else "classic"
-        mode_group.value = intro_mode
-        intro_mode_description.value = GAME_MODES[intro_mode]["description"]
-        intro_theme_summary.value = (
-            f"Tema: {THEME_OPTIONS[settings.theme_name]['label']} | "
-            f"Back: {BACK_OPTIONS[settings.card_back_name]['label']}"
-        )
-        intro_status.value = board.status_message
-
     def sync_config_controls():
         back_group.value = settings.card_back_name
         theme_group.value = settings.theme_name
@@ -139,14 +318,14 @@ def main(page: ft.Page):
         config_return_route = "/game"
         navigate("/config")
 
-    def handle_mode_change(e):
-        nonlocal selected_game_mode
-        if mode_group.value in GAME_MODES:
-            selected_game_mode = mode_group.value
-        sync_intro_controls()
-        page.update()
+    def open_mode_picker(e=None):
+        navigate("/mode")
 
-    mode_group.on_change = handle_mode_change
+    def select_mode(e):
+        nonlocal selected_game_mode
+        if e.control.data in GAME_MODES:
+            selected_game_mode = e.control.data
+            navigate("/intro")
 
     async def save_game():
         snapshot = board.capture_state(include_initial=True)
@@ -188,7 +367,7 @@ def main(page: ft.Page):
                 snapshot = None
         if snapshot is None:
             board.set_status("Nao existe uma partida guardada.")
-            sync_intro_controls()
+            sync_config_controls()
             if page.route == "/intro":
                 render_route("/intro")
             return False
@@ -196,7 +375,6 @@ def main(page: ft.Page):
         board.restore_state(snapshot, clear_history=True, set_initial=True, announce=False)
         settings = board.settings
         selected_game_mode = settings.game_mode
-        sync_intro_controls()
         sync_config_controls()
         apply_page_theme()
         page.update()
@@ -215,7 +393,7 @@ def main(page: ft.Page):
         )
         board.settings = settings
         board.start_new_game()
-        sync_intro_controls()
+        sync_config_controls()
         show_game()
 
     def continue_current_game(e):
@@ -244,54 +422,19 @@ def main(page: ft.Page):
         settings.theme_name = theme_group.value
         board.settings = settings
         board.apply_visual_preferences(update=True)
-        sync_intro_controls()
         apply_page_theme()
         navigate(config_return_route)
         board.set_status("Visual atualizado.")
-
-    intro_panel = ft.Container(
-        width=560,
-        padding=24,
-        content=ft.Column(
-            controls=[
-                intro_title,
-                intro_subtitle,
-                ft.Divider(),
-                ft.Text("Game mode", size=18, weight=ft.FontWeight.BOLD),
-                intro_mode_note,
-                mode_group,
-                intro_mode_description,
-                ft.Divider(),
-                ft.Text("Visual", size=18, weight=ft.FontWeight.BOLD),
-                intro_theme_summary,
-                ft.OutlinedButton("Tema e back", on_click=open_config_from_intro),
-                ft.Divider(),
-                intro_status,
-                ft.Row(
-                    controls=[
-                        ft.FilledButton(
-                            "Continuar jogo atual", on_click=continue_current_game
-                        ),
-                        ft.OutlinedButton(
-                            "Carregar jogo guardado", on_click=load_from_intro_clicked
-                        ),
-                    ],
-                    wrap=True,
-                    spacing=12,
-                ),
-                ft.FilledButton("Comecar novo jogo", on_click=start_new_game_from_intro),
-            ],
-            spacing=12,
-            tight=True,
-        ),
-    )
 
     config_panel = ft.Container(
         padding=20,
         content=ft.Column(
             controls=[
-                config_title,
-                config_subtitle,
+                ft.Text("Configuracao", size=24, weight=ft.FontWeight.BOLD),
+                ft.Text(
+                    "Aqui mudas apenas o visual da janela e o back das cartas.",
+                    size=13,
+                ),
                 ft.Divider(),
                 ft.Text("Modo principal ativo: 1 carta no waste.", size=14),
                 ft.Divider(),
@@ -318,21 +461,12 @@ def main(page: ft.Page):
 
     def apply_page_theme():
         theme = settings.theme
+        page.padding = page_padding()
         page.bgcolor = theme["page_bg"]
         board_frame.bgcolor = theme["board_bg"]
-        intro_panel.bgcolor = theme["panel_bg"]
         config_panel.bgcolor = theme["panel_bg"]
-
-        intro_title.color = theme["text"]
-        intro_subtitle.color = theme["muted"]
-        intro_mode_note.color = theme["muted"]
-        intro_mode_description.color = theme["muted"]
-        intro_theme_summary.color = theme["text"]
-        intro_status.color = theme["text"]
-
-        config_title.color = theme["text"]
-        config_subtitle.color = theme["muted"]
         status_text.color = theme["text"]
+        intro_status.color = theme["text"]
 
         for text in (score_text, timer_text, passes_text):
             text.color = theme["text"]
@@ -347,6 +481,175 @@ def main(page: ft.Page):
                 if hasattr(action, "icon_color"):
                     action.icon_color = theme["text"]
 
+    # --- intro menu builders ---
+
+    def build_intro_view():
+        theme = settings.theme
+        hero = ft.Container(
+            width=panel_width(),
+            padding=24 if is_narrow() else 30,
+            border_radius=ft.BorderRadius.all(32),
+            gradient=ft.LinearGradient(
+                begin=ft.Alignment(-1, -1),
+                end=ft.Alignment(1, 1),
+                colors=[theme["panel_bg_alt"], theme["board_bg"]],
+            ),
+            shadow=make_shadow(),
+            content=ft.Column(
+                controls=[
+                    ft.Container(
+                        padding=ft.Padding.symmetric(horizontal=12, vertical=8),
+                        border_radius=ft.BorderRadius.all(999),
+                        bgcolor="#22FFFFFF",
+                        content=ft.Text(
+                            "Jogo rápido, pensado para telemóvel",
+                            size=11,
+                            color=theme["text"],
+                        ),
+                    ),
+                    ft.Text(
+                        "Paciência",
+                        size=34 if is_narrow() else 40,
+                        weight=ft.FontWeight.BOLD,
+                        color=theme["text"],
+                    ),
+                    ft.Text(
+                        "Escolhe o modo da próxima partida, ajusta o visual e entra logo na mesa.",
+                        size=14,
+                        color=theme["muted"],
+                    ),
+                    small_banner(intro_status, ft.Icons.INFO_OUTLINE),
+                    ft.Row(
+                        controls=[
+                            compact_info(
+                                "Modo",
+                                GAME_MODES[selected_game_mode]["label"],
+                                ft.Icons.SPORTS_ESPORTS,
+                                on_click=open_mode_picker,
+                                hint="Toque para alterar",
+                            ),
+                            compact_info(
+                                "Visual",
+                                THEME_OPTIONS[settings.theme_name]["label"],
+                                ft.Icons.PALETTE,
+                                on_click=open_config_from_intro,
+                                hint="Toque para personalizar",
+                            ),
+                        ],
+                        wrap=True,
+                        spacing=12,
+                        run_spacing=12,
+                    ),
+                    ft.Row(
+                        controls=[
+                            action_chip(
+                                "Continuar",
+                                ft.Icons.PLAY_ARROW,
+                                continue_current_game,
+                                tone="filled",
+                            ),
+                            action_chip(
+                                "Carregar",
+                                ft.Icons.DOWNLOAD,
+                                load_from_intro_clicked,
+                            ),
+                            action_chip(
+                                "Nova partida",
+                                ft.Icons.CASINO,
+                                start_new_game_from_intro,
+                            ),
+                        ],
+                        wrap=True,
+                        spacing=12,
+                        run_spacing=12,
+                    ),
+                ],
+                spacing=16,
+                tight=True,
+            ),
+        )
+        return ft.Column(
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Column(
+                    expand=True,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[hero],
+                    spacing=16,
+                )
+            ],
+        )
+
+    def build_mode_view():
+        mode_cards = ft.Row(
+            controls=[
+                option_tile(
+                    GAME_MODES["classic"]["label"],
+                    GAME_MODES["classic"]["description"],
+                    selected_game_mode == "classic",
+                    ft.Icons.STARS,
+                    select_mode,
+                    data="classic",
+                ),
+                option_tile(
+                    GAME_MODES["vegas"]["label"],
+                    GAME_MODES["vegas"]["description"],
+                    selected_game_mode == "vegas",
+                    ft.Icons.PAID,
+                    select_mode,
+                    data="vegas",
+                ),
+            ],
+            wrap=True,
+            spacing=12,
+            run_spacing=12,
+        )
+        return ft.Column(
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[
+                ft.Column(
+                    spacing=16,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    controls=[
+                        surface_card(
+                            "Modo da partida",
+                            "Escolhe como queres contar os pontos na próxima partida.",
+                            mode_cards,
+                            ft.Icons.SPORTS_ESPORTS,
+                        ),
+                        ft.Container(
+                            width=panel_width(),
+                            content=ft.Row(
+                                controls=[
+                                    action_chip(
+                                        "Voltar",
+                                        ft.Icons.ARROW_BACK,
+                                        lambda e: navigate("/intro"),
+                                    ),
+                                ],
+                                wrap=True,
+                                spacing=12,
+                                run_spacing=12,
+                            ),
+                        ),
+                    ],
+                )
+            ],
+        )
+
+    def safe_page(content):
+        return ft.SafeArea(
+            content=ft.Container(
+                padding=ft.Padding.only(bottom=12),
+                content=content,
+            ),
+            maintain_bottom_view_padding=True,
+            minimum_padding=ft.Padding.only(bottom=12),
+            expand=True,
+        )
+
     def render_route(route: str):
         page.controls.clear()
 
@@ -360,6 +663,15 @@ def main(page: ft.Page):
                 title=ft.Text("Configuracao"),
             )
             page.add(config_panel)
+        elif route == "/mode":
+            page.appbar = ft.AppBar(
+                leading=ft.IconButton(
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=lambda e: navigate("/intro"),
+                ),
+                title=ft.Text("Modo da partida"),
+            )
+            page.add(safe_page(build_mode_view()))
         elif route == "/game":
             page.appbar = ft.AppBar(
                 title=ft.Text("Solitaire Atelier"),
@@ -406,16 +718,8 @@ def main(page: ft.Page):
             )
             page.add(board_frame, status_text)
         else:
-            sync_intro_controls()
             page.appbar = None
-            page.add(
-                ft.Column(
-                    expand=True,
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[intro_panel],
-                )
-            )
+            page.add(safe_page(build_intro_view()))
 
         apply_page_theme()
         page.update()
@@ -434,6 +738,11 @@ def main(page: ft.Page):
             except Exception:
                 pass
 
+    def handle_resize(e):
+        page.padding = page_padding()
+        render_route(page.route or "/intro")
+
+    page.on_resize = handle_resize
     page.run_task(run_timer)
     navigate("/intro")
 
