@@ -1144,6 +1144,11 @@ def main(page: ft.Page):
 
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.setup()
+    resize_state = {
+        "signature": None,
+        "game_narrow": is_narrow(),
+        "game_width": int(page.width or 0),
+    }
 
     page.services.append(
         ft.ShakeDetector(
@@ -1894,6 +1899,7 @@ def main(page: ft.Page):
         right=0,
         top=0,
         bottom=0,
+        visible=False,
         opacity=0,
         ignore_interactions=True,
         animate_opacity=ft.Animation(280, ft.AnimationCurve.EASE_OUT),
@@ -1964,6 +1970,7 @@ def main(page: ft.Page):
         nonlocal victory_visible, victory_sequence
         victory_sequence += 1
         victory_visible = False
+        victory_overlay.visible = False
         victory_overlay.ignore_interactions = True
         victory_overlay.opacity = 0
         victory_panel.opacity = 0
@@ -2091,6 +2098,7 @@ def main(page: ft.Page):
             "As quatro fundacoes fecharam como o ultimo ato de um filme de acao."
         )
         victory_badge_text.value = "QUATRO FUNDACOES FECHADAS"
+        victory_overlay.visible = True
         victory_overlay.ignore_interactions = False
         victory_overlay.opacity = 0
         victory_panel.opacity = 0
@@ -3930,11 +3938,43 @@ Ou começa um jogo novo!''',
         """
         Recalcula layout, tabuleiro e overlays quando a janela muda.
         """
-        page.padding = page_padding()
-        sync_victory_layout()
-        board.apply_visual_preferences(update=False)
-        board.display_waste(update=False)
-        render_route(page.route or "/intro")
+        route = page.route or "/intro"
+        current_is_narrow = is_narrow()
+        signature = (
+            route,
+            int(page.width or 0),
+            int(page.height or 0),
+            current_is_narrow,
+        )
+        if resize_state["signature"] == signature:
+            return
+
+        resize_state["signature"] = signature
+        was_game_narrow = resize_state["game_narrow"]
+        width_changed = int(page.width or 0) != resize_state["game_width"]
+        resize_state["game_width"] = int(page.width or 0)
+
+        if (
+            route == "/game"
+            and getattr(board, "is_dragging", False)
+            and not width_changed
+            and was_game_narrow == current_is_narrow
+        ):
+            return
+
+        if route == "/game" and was_game_narrow == current_is_narrow:
+            sync_victory_layout()
+            board.apply_visual_preferences(update=False)
+            board.display_waste(update=False)
+            apply_page_theme()
+            try:
+                page.update()
+            except Exception:
+                pass
+            return
+
+        resize_state["game_narrow"] = current_is_narrow
+        render_route(route)
 
     async def lock_portrait_mode():
         """

@@ -163,7 +163,7 @@ class Card(ft.GestureDetector):
             return False
         if self.face_up and self.slot.type != "waste":
             return True
-        if self.slot.type == "waste" and len(self.solitaire.waste.pile) - 1 == self.solitaire.waste.pile.index(self):
+        if self.slot.type == "waste" and self.slot.is_top_card(self):
             return True
         return False
 
@@ -177,6 +177,7 @@ class Card(ft.GestureDetector):
         """
         if self.can_be_moved():
             self._dragging_cards = self.get_cards_to_move()
+            self.solitaire.is_dragging = True
             self.solitaire.current_top = e.control.top
             self.solitaire.current_left = e.control.left
 
@@ -188,11 +189,18 @@ class Card(ft.GestureDetector):
             e:
                 Evento de arrasto emitido pelo Flet, contendo o delta local.
         """
-        if self.can_be_moved():
+        if self.can_be_moved() and self._dragging_cards:
             for card in self._dragging_cards:
                 card.top = max(0, card.top + e.local_delta.y)
                 card.left = max(0, card.left + e.local_delta.x)
-                card.update()
+            if len(self._dragging_cards) == 1:
+                self._dragging_cards[0].update()
+            elif self.solitaire.can_update():
+                update_controls = getattr(self.solitaire, "update_controls", None)
+                if callable(update_controls):
+                    update_controls(*self._dragging_cards)
+                else:
+                    self.solitaire.update()
 
     def drop(self, e: ft.DragEndEvent):
         """
@@ -203,30 +211,36 @@ class Card(ft.GestureDetector):
         estado para `undo`, move as cartas e delega o fecho do movimento ao
         tabuleiro. Se nenhum alvo servir, devolve as cartas a posicao inicial.
         """
-        if self.can_be_moved():
-            cards_to_drag = self._dragging_cards
-            self.solitaire.move_on_top(cards_to_drag)
-            slots = self.solitaire.tableau + self.solitaire.foundation
-            for slot in slots:
-                if abs(self.top - slot.upper_card_top()) < 40 and abs(self.left - slot.left) < 40:
-                    if (
-                        slot.type == "tableau"
-                        and self.solitaire.check_tableau_rules(self, slot.get_top_card())
-                    ) or (
-                        slot.type == "foundation"
-                        and len(cards_to_drag) == 1
-                        and self.solitaire.check_foundation_rules(self, slot.get_top_card())
-                    ):
-                        self.solitaire.save_undo_state()
-                        old_slot = self.slot
-                        for card in cards_to_drag:
-                            card.place(slot)
-                        self.solitaire.finish_move(old_slot, slot)
-                        self._dragging_cards = []
-                        return
+        try:
+            if self.can_be_moved():
+                cards_to_drag = self._dragging_cards
+                self.solitaire.move_on_top(cards_to_drag, update=False)
+                slots = self.solitaire.tableau + self.solitaire.foundation
+                for slot in slots:
+                    if abs(self.top - slot.upper_card_top()) < 40 and abs(self.left - slot.left) < 40:
+                        if (
+                            slot.type == "tableau"
+                            and self.solitaire.check_tableau_rules(self, slot.get_top_card())
+                        ) or (
+                            slot.type == "foundation"
+                            and len(cards_to_drag) == 1
+                            and self.solitaire.check_foundation_rules(self, slot.get_top_card())
+                        ):
+                            self.solitaire.save_undo_state()
+                            old_slot = self.slot
+                            for card in cards_to_drag:
+                                card.place(slot, update=False, bring_to_front=False)
+                            self.solitaire.move_on_top(cards_to_drag, update=False)
+                            self.solitaire.finish_move(old_slot, slot, update_board=False)
+                            if self.solitaire.can_update():
+                                self.solitaire.update()
+                            return
 
-            self.solitaire.bounce_back(cards_to_drag)
-            self.solitaire.update()
+                self.solitaire.bounce_back(cards_to_drag)
+                if self.solitaire.can_update():
+                    self.solitaire.update()
+        finally:
+            self.solitaire.is_dragging = False
             self._dragging_cards = []
 
     def doubleclick(self, e):
@@ -240,12 +254,15 @@ class Card(ft.GestureDetector):
         if self.slot is not None and self.slot.type in ("waste", "tableau"):
             if self.face_up:
                 self.solitaire.save_undo_state()
-                self.solitaire.move_on_top([self])
+                self.solitaire.move_on_top([self], update=False)
                 old_slot = self.slot
                 for slot in self.solitaire.foundation:
                     if self.solitaire.check_foundation_rules(self, slot.get_top_card()):
-                        self.place(slot)
-                        self.solitaire.finish_move(old_slot, slot)
+                        self.place(slot, update=False, bring_to_front=False)
+                        self.solitaire.move_on_top([self], update=False)
+                        self.solitaire.finish_move(old_slot, slot, update_board=False)
+                        if self.solitaire.can_update():
+                            self.solitaire.update()
                         return
                 self.solitaire.history.pop() if self.solitaire.history else None
 
@@ -262,12 +279,12 @@ class Card(ft.GestureDetector):
         if self.slot.type == "stock":
             self.solitaire.draw_from_stock()
         if self.slot.type == "tableau":
-            if self.face_up is False and len(self.slot.pile) - 1 == self.slot.pile.index(self):
+            if self.face_up is False and self.slot.is_top_card(self):
                 self.solitaire.save_undo_state()
                 self.turn_face_up()
                 self.solitaire.handle_tableau_reveal()
 
-    def place(self, slot):
+    def place(self, slot, update=True, bring_to_front=True):
         """
         Coloca a carta num novo slot e atualiza coordenadas.
 
@@ -279,6 +296,11 @@ class Card(ft.GestureDetector):
         Args:
             slot:
                 Novo slot de destino.
+            update:
+                Se `True`, atualiza imediatamente o tabuleiro; caso contrario,
+                o chamador pode agrupar varias mudancas numa unica renderizacao.
+            bring_to_front:
+                Se `True`, reordena a carta para o topo visual do stack.
         """
         self.top = slot.top
         self.left = slot.left
@@ -290,10 +312,9 @@ class Card(ft.GestureDetector):
 
         self.slot = slot
         slot.pile.append(self)
-        self.solitaire.move_on_top([self])
-        if self.solitaire.check_if_you_won():
-            self.solitaire.on_win()
-        if self.solitaire.can_update():
+        if bring_to_front:
+            self.solitaire.move_on_top([self], update=False)
+        if update and self.solitaire.can_update():
             self.solitaire.update()
 
     def get_cards_to_move(self):

@@ -133,6 +133,7 @@ class GameBoard(ft.Stack):
         self.elapsed_seconds = 0
         self.status_message = ""
         self._game_won = False
+        self.is_dragging = False
         self.is_ready = False
         self.controls = []
         self.cards = []
@@ -152,6 +153,28 @@ class GameBoard(ft.Stack):
             return self.page is not None
         except RuntimeError:
             return False
+
+    def update_controls(self, *controls):
+        """
+        Atualiza um pequeno conjunto de controlos numa unica operacao.
+
+        O fluxo de drag move varias cartas no mesmo frame. Em vez de disparar
+        um `update()` por carta, este helper tenta enviar todas as alteracoes
+        juntas. Se isso falhar, recua para um redraw normal do tabuleiro.
+        """
+        if not controls:
+            return
+
+        page_update = getattr(self.app_page, "update", None)
+        if callable(page_update):
+            try:
+                page_update(*controls)
+                return
+            except Exception:
+                pass
+
+        if self.can_update():
+            self.update()
 
     def notify_change(self, autosave=False):
         """
@@ -306,13 +329,13 @@ class GameBoard(ft.Stack):
         first_slot = 0
         while card_index <= 27:
             for slot_index in range(first_slot, len(self.tableau)):
-                deck[card_index].place(self.tableau[slot_index])
+                deck[card_index].place(self.tableau[slot_index], update=False)
                 card_index += 1
             first_slot += 1
         for slot in self.tableau:
             slot.get_top_card().turn_face_up(notify=False)
         for card in deck[28:]:
-            card.place(self.stock)
+            card.place(self.stock, update=False)
 
     def save_undo_state(self):
         """
@@ -336,7 +359,7 @@ class GameBoard(ft.Stack):
         if notify:
             self.set_status("Carta revelada no tableau.")
 
-    def finish_move(self, old_slot, new_slot):
+    def finish_move(self, old_slot, new_slot, update_board=True):
         """
         Fecha um movimento bem-sucedido entre slots.
 
@@ -352,18 +375,23 @@ class GameBoard(ft.Stack):
                 Slot de origem.
             new_slot:
                 Slot de destino.
+            update_board:
+                Quando `False`, os efeitos visuais ficam preparados e o
+                chamador faz o redraw final em lote.
         """
         if old_slot.type == "tableau" and old_slot.pile:
-            old_slot.get_top_card().turn_face_up()
+            old_slot.get_top_card().turn_face_up(notify=False)
             self.handle_tableau_reveal()
         elif old_slot.type == "waste":
-            self.display_waste()
+            self.display_waste(update=False)
 
         self.apply_score_for_move(old_slot.type, new_slot.type)
         just_won = False
         if self.check_if_you_won():
             just_won = not self._game_won
             self._game_won = True
+        if update_board and self.can_update():
+            self.update()
         self.notify_change(autosave=True)
         if just_won and self.on_win is not None:
             self.on_win()
@@ -438,15 +466,15 @@ class GameBoard(ft.Stack):
 
         self.reset_board_state()
         for card_id in snapshot.get("stock", []):
-            self.cards_by_id[card_id].place(self.stock)
+            self.cards_by_id[card_id].place(self.stock, update=False)
         for card_id in snapshot.get("waste", []):
-            self.cards_by_id[card_id].place(self.waste)
+            self.cards_by_id[card_id].place(self.waste, update=False)
         for slot, pile_ids in zip(self.foundation, snapshot.get("foundation", [])):
             for card_id in pile_ids:
-                self.cards_by_id[card_id].place(slot)
+                self.cards_by_id[card_id].place(slot, update=False)
         for slot, pile_ids in zip(self.tableau, snapshot.get("tableau", [])):
             for card_id in pile_ids:
-                self.cards_by_id[card_id].place(slot)
+                self.cards_by_id[card_id].place(slot, update=False)
 
         face_map = snapshot.get("face_up", {})
         for card in self.cards:
@@ -483,9 +511,11 @@ class GameBoard(ft.Stack):
             card.visible = False
         for _ in range(min(self.settings.waste_size, len(self.stock.pile))):
             top_card = self.stock.pile[-1]
-            top_card.place(self.waste)
-            top_card.turn_face_up()
-        self.display_waste()
+            top_card.place(self.waste, update=False)
+            top_card.turn_face_up(notify=False)
+        self.display_waste(update=False)
+        if self.can_update():
+            self.update()
         self.notify_change(autosave=True)
 
     def recycle_waste_to_stock(self):
@@ -495,9 +525,11 @@ class GameBoard(ft.Stack):
         self.waste.pile.reverse()
         while self.waste.pile:
             card = self.waste.pile[0]
-            card.turn_face_down()
-            card.place(self.stock)
+            card.turn_face_down(notify=False)
+            card.place(self.stock, update=False)
         self.score -= 20
+        if self.can_update():
+            self.update()
         self.notify_change(autosave=True)
 
     def move_on_top(self, cards_to_drag, update=True):
@@ -507,6 +539,8 @@ class GameBoard(ft.Stack):
         Isto garante que as cartas arrastadas ficam sempre visiveis acima das
         restantes durante a interacao.
         """
+        if not cards_to_drag:
+            return
         for card in cards_to_drag:
             if card in self.controls:
                 self.controls.remove(card)
@@ -717,15 +751,15 @@ class GameBoard(ft.Stack):
 
         for card in self.cards:
             card.sync_size()
-            if not card.face_up:
+            if not card.face_up and card.content.content.src != self.settings.card_back:
                 card.turn_face_down(notify=False)
-            if card.slot is None:
-                continue
-            card.left = card.slot.left
-            if card.slot.type == "tableau":
-                card.top = card.slot.top + self.card_offset * card.slot.pile.index(card)
-            else:
-                card.top = card.slot.top
+        for slot in self.all_slots:
+            for index, card in enumerate(slot.pile):
+                card.left = slot.left
+                if slot.type == "tableau":
+                    card.top = slot.top + self.card_offset * index
+                else:
+                    card.top = slot.top
 
         if update and self.can_update():
             self.update()
