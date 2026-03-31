@@ -1,55 +1,30 @@
 {
   "themes": {
-    "classic_green_remix": {
-      "label": "Zaheenff",
-      "page_bg": "#120718",
-      "header_bg": "#0F0E23",
-      "panel_bg": "#12112A",
-      "panel_bg_alt": "#27263F",
-      "board_bg": "#521E6B",
-      "board_bg_alt": "#431958",
-      "chip_bg": "#2E1848",
-      "slot_bg": "#67397D",
-      "slot_border": "#91617D",
+    "zaheen_do_lol": {
+      "label": "Zaheen Do Lol",
+      "page_bg": "#381805",
+      "header_bg": "#442311",
+      "panel_bg": "#532A15",
+      "panel_bg_alt": "#673F2A",
+      "board_bg": "#FD6D18",
+      "board_bg_alt": "#CF5914",
+      "chip_bg": "#9E4817",
+      "slot_bg": "#FD7F34",
+      "slot_border": "#798335",
       "text": "#F7F7F2",
-      "muted": "#C9BACC",
-      "accent": "#793E60",
-      "custom": true
-    },
-    "zaheenff_remix": {
-      "label": "Zaheenff Remix",
-      "page_bg": "#250E30",
-      "header_bg": "#423EA6",
-      "panel_bg": "#504BC9",
-      "panel_bg_alt": "#645FDD",
-      "board_bg": "#A841DA",
-      "board_bg_alt": "#8A35B3",
-      "chip_bg": "#794ADA",
-      "slot_bg": "#B258DE",
-      "slot_border": "#FFE6F4",
-      "text": "#152016",
-      "muted": "#4A2C5D",
-      "accent": "#FFE1F2",
+      "muted": "#F9D0B5",
+      "accent": "#5B6809",
       "custom": true
     }
   },
   "backs": {
-    "classic_green_remix": {
-      "label": "Zaheenff",
-      "asset": "backs/custom/classic_green_remix.jpg",
-      "suggested_theme": "classic_green_remix",
-      "fit": "cover",
-      "scale": 1.05,
-      "board_bg": "boards/classic_green_remix_board.jpg",
-      "custom": true
-    },
-    "zaheenff_remix": {
-      "label": "Zaheenff Remix",
-      "asset": "backs/custom/zaheenff_remix.jpg",
-      "suggested_theme": "zaheenff_remix",
+    "zaheen_do_lol": {
+      "label": "Zaheen Do Lol",
+      "asset": "backs/custom/zaheen_do_lol.jpg",
+      "suggested_theme": "zaheen_do_lol",
       "fit": "cover",
       "scale": 1.0,
-      "board_bg": "boards/zaheenff_remix_board.jpg",
+      "board_bg": "boards/zaheen_do_lol_board.jpg",
       "custom": true
     }
   },

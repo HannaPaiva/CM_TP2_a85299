@@ -12,6 +12,7 @@ duplo clique e restauracao a partir de snapshots.
 """
 
 import flet as ft
+import time
 
 try:
     from .settings import BACK_OPTIONS
@@ -49,8 +50,11 @@ class Card(ft.GestureDetector):
         self.face_up = False
         self.slot = None
         self._dragging_cards = []
+        self._pending_drag_dx = 0.0
+        self._pending_drag_dy = 0.0
+        self._last_drag_flush = 0.0
         self.mouse_cursor = ft.MouseCursor.MOVE
-        self.drag_interval = 16
+        self.drag_interval = 33
         self.on_pan_update = self.drag
         self.on_pan_start = self.start_drag
         self.on_pan_end = self.drop
@@ -177,9 +181,52 @@ class Card(ft.GestureDetector):
         """
         if self.can_be_moved():
             self._dragging_cards = self.get_cards_to_move()
+            self._pending_drag_dx = 0.0
+            self._pending_drag_dy = 0.0
+            self._last_drag_flush = 0.0
             self.solitaire.is_dragging = True
             self.solitaire.current_top = e.control.top
             self.solitaire.current_left = e.control.left
+
+    def _flush_drag_delta(self, force=False):
+        """
+        Aplica o delta acumulado do arrasto numa unica atualizacao visual.
+
+        Durante o gesto, o Flet pode emitir varios eventos muito proximos entre
+        si. Agrupar pequenos deltas reduz o numero de redraws sem alterar a
+        logica do drop.
+        """
+        if not self._dragging_cards:
+            return
+
+        dx = self._pending_drag_dx
+        dy = self._pending_drag_dy
+        if not force:
+            if abs(dx) < 1 and abs(dy) < 1:
+                return
+            now = time.monotonic()
+            flush_interval = 0.03 if len(self._dragging_cards) == 1 else 0.045
+            distance = abs(dx) + abs(dy)
+            if self._last_drag_flush and now - self._last_drag_flush < flush_interval and distance < 6:
+                return
+            self._last_drag_flush = now
+        elif dx == 0 and dy == 0:
+            return
+
+        self._pending_drag_dx = 0.0
+        self._pending_drag_dy = 0.0
+        for card in self._dragging_cards:
+            card.top = max(0, card.top + dy)
+            card.left = max(0, card.left + dx)
+
+        if len(self._dragging_cards) == 1:
+            self._dragging_cards[0].update()
+        elif self.solitaire.can_update():
+            update_controls = getattr(self.solitaire, "update_controls", None)
+            if callable(update_controls):
+                update_controls(*self._dragging_cards)
+            else:
+                self.solitaire.update()
 
     def drag(self, e: ft.DragUpdateEvent):
         """
@@ -190,17 +237,9 @@ class Card(ft.GestureDetector):
                 Evento de arrasto emitido pelo Flet, contendo o delta local.
         """
         if self.can_be_moved() and self._dragging_cards:
-            for card in self._dragging_cards:
-                card.top = max(0, card.top + e.local_delta.y)
-                card.left = max(0, card.left + e.local_delta.x)
-            if len(self._dragging_cards) == 1:
-                self._dragging_cards[0].update()
-            elif self.solitaire.can_update():
-                update_controls = getattr(self.solitaire, "update_controls", None)
-                if callable(update_controls):
-                    update_controls(*self._dragging_cards)
-                else:
-                    self.solitaire.update()
+            self._pending_drag_dx += e.local_delta.x
+            self._pending_drag_dy += e.local_delta.y
+            self._flush_drag_delta(force=False)
 
     def drop(self, e: ft.DragEndEvent):
         """
@@ -213,6 +252,7 @@ class Card(ft.GestureDetector):
         """
         try:
             if self.can_be_moved():
+                self._flush_drag_delta(force=True)
                 cards_to_drag = self._dragging_cards
                 self.solitaire.move_on_top(cards_to_drag, update=False)
                 slots = self.solitaire.tableau + self.solitaire.foundation
@@ -241,6 +281,9 @@ class Card(ft.GestureDetector):
                     self.solitaire.update()
         finally:
             self.solitaire.is_dragging = False
+            self._pending_drag_dx = 0.0
+            self._pending_drag_dy = 0.0
+            self._last_drag_flush = 0.0
             self._dragging_cards = []
 
     def doubleclick(self, e):

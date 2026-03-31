@@ -21,6 +21,7 @@ import colorsys
 import json
 import math
 import random
+import time
 from pathlib import Path
 
 import flet as ft
@@ -1144,6 +1145,11 @@ def main(page: ft.Page):
 
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.setup()
+    timer_state = {
+        "last_observed_elapsed": int(board.elapsed_seconds),
+        "anchor_elapsed": int(board.elapsed_seconds),
+        "anchor_monotonic": time.monotonic(),
+    }
     resize_state = {
         "signature": None,
         "game_narrow": is_narrow(),
@@ -3924,10 +3930,23 @@ Ou começa um jogo novo!''',
         de vitoria.
         """
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.25)
+            now = time.monotonic()
+            observed_elapsed = int(board.elapsed_seconds)
+            if observed_elapsed != timer_state["last_observed_elapsed"]:
+                timer_state["last_observed_elapsed"] = observed_elapsed
+                timer_state["anchor_elapsed"] = observed_elapsed
+                timer_state["anchor_monotonic"] = now
             if board._game_won:
                 continue
-            board.elapsed_seconds += 1
+            live_elapsed = timer_state["anchor_elapsed"] + max(
+                0,
+                int(now - timer_state["anchor_monotonic"]),
+            )
+            if live_elapsed == observed_elapsed:
+                continue
+            board.elapsed_seconds = live_elapsed
+            timer_state["last_observed_elapsed"] = live_elapsed
             timer_text.value = f"Tempo: {board.format_elapsed()}"
             try:
                 timer_text.update()
