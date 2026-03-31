@@ -36,6 +36,7 @@ from solitaire.custom_theme_store import (
     update_custom_theme_palette,
 )
 from solitaire.gameboard import GameBoard
+from solitaire.sound import ClientSoundPlayer
 from solitaire.settings import (
     BACK_OPTIONS,
     Settings,
@@ -1148,6 +1149,7 @@ def main(page: ft.Page):
             pass
 
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
+    board.sound_player = ClientSoundPlayer(page)
     board.setup()
     timer_state = {
         "last_observed_elapsed": int(board.elapsed_seconds),
@@ -2205,6 +2207,8 @@ def main(page: ft.Page):
         """
         Reencaminha o callback de vitoria do tabuleiro para a cena animada.
         """
+        if board.sound_player is not None:
+            board.sound_player._play("good")
         page.run_task(play_victory_celebration)
 
     board.on_win = trigger_victory_celebration

@@ -54,6 +54,18 @@ wheels = [
 ]
 
 [[package]]
+name = "flet-audio"
+version = "0.82.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a0/44/12fabe9912192de64b09a3549edb9fd5adbdd72880b3513fd3a317098c5d/flet_audio-0.82.2.tar.gz", hash = "sha256:7585161dc946a737c865a3611524a691d0070b1fdd84acf5b96674ac36a1232a", size = 10674, upload-time = "2026-03-10T01:15:49.965Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/bc/79b1d765d3e9808475e1718a2d31aaa3a131029282d20c3f792a873a084d/flet_audio-0.82.2-py3-none-any.whl", hash = "sha256:d7acbf9a06600119729a510bdb043431b6b0e59ce97c213c9141e6dda01e6b80", size = 12464, upload-time = "2026-03-10T01:15:50.687Z" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -162,10 +174,12 @@ source = { virtual = "." }
 dependencies = [
     { name = "duckdb" },
     { name = "flet" },
+    { name = "flet-audio" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "duckdb" },
     { name = "flet" },
+    { name = "flet-audio", specifier = ">=0.82.2" },
 ]

@@ -277,6 +277,8 @@ class Card(ft.GestureDetector):
                             return
 
                 self.solitaire.bounce_back(cards_to_drag)
+                if self.solitaire.sound_player is not None:
+                    self.solitaire.sound_player._play("bad")
                 if self.solitaire.can_update():
                     self.solitaire.update()
         finally:

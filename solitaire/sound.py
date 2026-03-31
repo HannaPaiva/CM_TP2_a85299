@@ -91,21 +91,25 @@ class ClientSoundPlayer:
         def on_state_change(e):
             if e.state in ("completed", "stopped"):
                 try:
-                    self.page.overlay.remove(audio)
+                    self.page.services.remove(audio)
                     self.page.update()
                 except Exception:
                     pass
 
+        def on_loaded(_):
+            self.page.run_task(audio.play)
+
         audio = fta.Audio(
             src=src,
-            autoplay=True,
+            autoplay=False,
             volume=self.effects_volume,
             balance=0.0,
             release_mode=fta.ReleaseMode.RELEASE,
+            on_loaded=on_loaded,
             on_state_change=on_state_change,
         )
 
-        self.page.overlay.append(audio)
+        self.page.services.append(audio)
         self.page.update()
 
     async def play_bad(self) -> None:

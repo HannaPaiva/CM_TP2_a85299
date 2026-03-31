@@ -135,6 +135,7 @@ class GameBoard(ft.Stack):
         self._game_won = False
         self.is_dragging = False
         self.is_ready = False
+        self.sound_player = None
         self.controls = []
         self.cards = []
         self.cards_by_id = {}
