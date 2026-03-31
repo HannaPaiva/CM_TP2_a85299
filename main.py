@@ -1130,6 +1130,10 @@ def main(page: ft.Page):
             autosave:
                 Mantido na assinatura para compatibilidade com o callback
                 `on_change` do tabuleiro.
+
+        Nota de performance:
+            Este refresh atualiza apenas os controlos de HUD. O tabuleiro em si
+            nao e redesenhado aqui, o que ajuda a nao competir com o drag/drop.
         """
         score_text.value = f"Score: {board.score}"
         timer_text.value = f"Tempo: {board.format_elapsed()}"
@@ -3927,7 +3931,8 @@ Ou começa um jogo novo!''',
         Atualiza o cronometro da partida em segundo plano.
 
         O contador pausa automaticamente quando o tabuleiro entra em estado
-        de vitoria.
+        de vitoria. O texto do tempo e atualizado diretamente, sem pedir
+        redraw completo do board, para manter a interacao de drag mais leve.
         """
         while True:
             await asyncio.sleep(0.25)
@@ -3956,6 +3961,9 @@ Ou começa um jogo novo!''',
     def handle_resize(e):
         """
         Recalcula layout, tabuleiro e overlays quando a janela muda.
+
+        O handler evita rerenders mais caros quando recebe eventos repetidos
+        sem mudanca material de layout, especialmente durante um drag ativo.
         """
         route = page.route or "/intro"
         current_is_narrow = is_narrow()

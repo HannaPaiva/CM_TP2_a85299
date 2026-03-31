@@ -1,3 +1,11 @@
+"""
+Testes de regressao para as otimizações de drag/drop.
+
+O objetivo aqui e proteger os pontos que mais facilmente voltariam a ficar
+caros: updates por carta, redraws prematuros em `place()` e refreshes em
+cascata ao comprar do stock.
+"""
+
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -8,6 +16,10 @@ from solitaire.settings import Settings
 
 
 class FakeSlot:
+    """
+    Double minimo de slot para cenarios isolados de performance.
+    """
+
     def __init__(self, slot_type="tableau", top=0, left=0):
         self.type = slot_type
         self.top = top
@@ -19,6 +31,10 @@ class FakeSlot:
 
 
 class FakeSolitaire:
+    """
+    Double minimo do tabuleiro para contar pedidos de update.
+    """
+
     def __init__(self):
         self.settings = Settings()
         self.card_offset = 20
@@ -47,6 +63,10 @@ class FakeSolitaire:
 
 
 class CountingGameBoard(GameBoard):
+    """
+    Variante de `GameBoard` que conta quantos redraws foram pedidos.
+    """
+
     def __init__(self):
         super().__init__(
             page=SimpleNamespace(width=1000, height=700),
@@ -64,13 +84,23 @@ class CountingGameBoard(GameBoard):
 
 
 class DragPerformanceRegressionTests(unittest.TestCase):
+    """
+    Agrupa cenarios que nao podem regredir sem reintroduzir lag.
+    """
+
     @staticmethod
     def make_card(solitaire, suite_name, rank_name, rank_value):
+        """
+        Cria uma carta simples para testes controlados.
+        """
         suite = SimpleNamespace(name=suite_name, color="RED")
         rank = SimpleNamespace(name=rank_name, value=rank_value)
         return Card(solitaire=solitaire, suite=suite, rank=rank)
 
     def test_drag_batches_visual_update_for_tableau_stack(self):
+        """
+        Arrastar uma subpilha deve evitar update individual por carta.
+        """
         solitaire = FakeSolitaire()
         slot = FakeSlot(slot_type="tableau", top=30, left=40)
         cards = [
@@ -103,6 +133,9 @@ class DragPerformanceRegressionTests(unittest.TestCase):
         self.assertEqual(cards[2].left, 47)
 
     def test_place_can_skip_immediate_update_when_batching(self):
+        """
+        `place(update=False)` deve permitir batching sem redraw imediato.
+        """
         solitaire = FakeSolitaire()
         old_slot = FakeSlot(slot_type="tableau", top=10, left=15)
         new_slot = FakeSlot(slot_type="tableau", top=120, left=220)
@@ -125,6 +158,9 @@ class DragPerformanceRegressionTests(unittest.TestCase):
         self.assertEqual(solitaire.last_moved_cards, [card])
 
     def test_draw_from_stock_updates_board_once(self):
+        """
+        Comprar do stock deve terminar com apenas um redraw do board.
+        """
         board = CountingGameBoard()
         board.setup()
         board.update_calls = 0

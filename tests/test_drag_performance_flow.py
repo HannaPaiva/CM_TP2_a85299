@@ -1,3 +1,11 @@
+"""
+Testes do fluxo principal das optimizacoes de drag/drop.
+
+Este modulo garante que o caminho feliz das melhorias de performance continua
+ativo: batching de updates durante o arrasto e um unico redraw ao fechar um
+drop valido.
+"""
+
 from types import SimpleNamespace
 from unittest.mock import Mock
 import unittest
@@ -7,7 +15,14 @@ from solitaire.settings import Settings
 
 
 class DragPerformanceFlowTests(unittest.TestCase):
+    """
+    Valida o fluxo esperado das optimizacoes de interacao do tabuleiro.
+    """
+
     def make_board(self):
+        """
+        Cria um `GameBoard` controlado para contar redraws com precisao.
+        """
         page = SimpleNamespace(width=1000, height=700, update=Mock(name="page.update"))
         board = GameBoard(
             page=page,
@@ -22,6 +37,9 @@ class DragPerformanceFlowTests(unittest.TestCase):
         return board, page
 
     def test_drag_batches_stack_updates_into_one_page_refresh(self):
+        """
+        Um arrasto de pilha deve atualizar as cartas numa chamada agrupada.
+        """
         board, page = self.make_board()
         slot = board.tableau[0]
         dragged_cards = board.cards[:3]
@@ -42,6 +60,9 @@ class DragPerformanceFlowTests(unittest.TestCase):
             self.assertEqual(card.top, slot.top + (board.card_offset * index) + 7)
 
     def test_valid_drop_redraws_board_once(self):
+        """
+        Um drop valido deve consolidar a jogada num unico redraw do board.
+        """
         board, _page = self.make_board()
         ace = next(
             card

@@ -1,3 +1,10 @@
+"""
+Testes do fluxo completo de temas personalizados.
+
+Este modulo protege o caminho de criacao, atualizacao e remocao de temas para
+garantir que assets, JSON e registry em memoria continuam coerentes.
+"""
+
 import base64
 import copy
 import json
@@ -29,7 +36,14 @@ BUILTIN_THEME_OPTIONS = {
 
 
 class ThemeCreationFlowTests(unittest.TestCase):
+    """
+    Valida o ciclo de vida dos temas personalizados ponta a ponta.
+    """
+
     def setUp(self):
+        """
+        Prepara um projeto temporario isolado para os testes de tema.
+        """
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = Path(self.tempdir.name)
         (self.root / "assets" / "backs" / "custom").mkdir(parents=True, exist_ok=True)
@@ -53,6 +67,9 @@ class ThemeCreationFlowTests(unittest.TestCase):
         settings_module.THEME_OPTIONS.update(copy.deepcopy(BUILTIN_THEME_OPTIONS))
 
     def tearDown(self):
+        """
+        Restaura o estado global dos modulos alterados pelo teste.
+        """
         settings_module.BACK_OPTIONS.clear()
         settings_module.BACK_OPTIONS.update(copy.deepcopy(ORIGINAL_BACK_OPTIONS))
         settings_module.THEME_OPTIONS.clear()
@@ -64,6 +81,9 @@ class ThemeCreationFlowTests(unittest.TestCase):
         self.tempdir.cleanup()
 
     def test_flet_image_controls_accept_bytes_sources(self):
+        """
+        Confirma que o Flet aceita bytes diretamente em imagens usadas no fluxo.
+        """
         image = ft.Image(src=TINY_PNG, width=32, height=32)
         decoration = ft.DecorationImage(src=TINY_PNG, fit=ft.BoxFit.COVER)
 
@@ -71,6 +91,9 @@ class ThemeCreationFlowTests(unittest.TestCase):
         self.assertEqual(decoration.src, TINY_PNG)
 
     def test_create_theme_refresh_registry_and_apply_settings(self):
+        """
+        Criar um tema deve persistir assets e torna-lo utilizavel no `Settings`.
+        """
         created = store.save_custom_theme_bundle(
             label="Tema QA",
             base_color="#123456",
@@ -116,6 +139,9 @@ class ThemeCreationFlowTests(unittest.TestCase):
         self.assertEqual(restored_settings.theme["label"], "Tema QA")
 
     def test_update_and_delete_theme_assets_cleanup_files(self):
+        """
+        Atualizar e apagar temas deve limpar os ficheiros antigos corretamente.
+        """
         created = store.save_custom_theme_bundle(
             label="Tema Cleanup",
             base_color="#654321",
