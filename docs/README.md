@@ -12,6 +12,7 @@ Ficheiros principais:
 - `docs/solitaire_settings.md`: configuracao, temas, versos e dificuldade.
 - `docs/solitaire_storage.md`: persistencia DuckDB.
 - `docs/solitaire_custom_theme_store.md`: CRUD de temas personalizados.
+- `docs/solitaire_sound.md`: efeitos sonoros e feedback audio.
 
 Ficheiros de testes:
 

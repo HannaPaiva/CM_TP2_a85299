@@ -18,6 +18,7 @@ Mapa de chamadas principais:
 - `main.py` -> `solitaire.settings.Settings`
 - `main.py` -> `solitaire.storage.GameStorage`
 - `main.py` -> `solitaire.gameboard.GameBoard`
+- `main.py` -> `solitaire.sound.ClientSoundPlayer`
 - `main.py` -> helpers de `solitaire.custom_theme_store`
 - `solitaire.gameboard.GameBoard` -> `solitaire.slot.Slot`
 - `solitaire.gameboard.GameBoard` -> `solitaire.card.Card`

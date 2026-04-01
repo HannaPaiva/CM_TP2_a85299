@@ -15,6 +15,7 @@ UI e quando o estado deve ser salvo.
 - sincroniza score, tempo e mensagens
 - gere autosave e load
 - integra configuracao visual e temas personalizados
+- integra feedback sonoro
 - monta a celebracao de vitoria
 
 ## Como faz
@@ -69,3 +70,4 @@ As otimizacoes de UX que passam por aqui sao:
 - `solitaire.settings`
 - `solitaire.storage`
 - `solitaire.custom_theme_store`
+- `solitaire.sound`

@@ -64,7 +64,7 @@ uv run python -m compileall main.py solitaire
 | Salvar e carregar o estado do jogo | O estado da partida é persistido e restaurado corretamente. A aplicação guarda o progresso em **DuckDB** e em **local storage**, permitindo recuperar a última sessão guardada. O carregamento está disponível na interface e o guardado é assegurado pelo fluxo de persistência da aplicação. | Concluído |
 | Escolher a imagem traseira das cartas, entre 4 opções diferentes | Estão disponíveis quatro versos predefinidos para as cartas: **Classic**, **Forest**, **Ocean** e **Sunrise**. | Concluído |
 | Sistema de pontuação com cronómetro visível durante toda a partida | O jogo apresenta **pontuação** e **cronómetro** visíveis no ecrã de jogo, atualizados ao longo da partida e interrompidos quando a vitória é alcançada. | Concluído |
-| Duas funcionalidades extra à escolha | Foram implementadas duas funcionalidades extra: **autowin por agitação do dispositivo** e **personalização avançada do tabuleiro e da interface através das settings e de temas personalizados**. | Concluído |
+| Duas funcionalidades extra à escolha | Foram implementadas funcionalidades extra: **autowin por agitação do dispositivo**, **personalização avançada do tabuleiro e da interface através das settings e de temas personalizados**, e **feedback sonoro com efeitos de audio para jogadas e eventos**. | Concluído |
 | README.md com justificação e descrição das funcionalidades extra | Este ficheiro apresenta a motivação, a descrição detalhada das funcionalidades extra e a verificação do cumprimento dos requisitos do enunciado. | Concluído |
 
 ## Conclusão da verificação
@@ -106,6 +106,13 @@ Não ficou nenhum requisito obrigatório por cumprir.
 - Upload de imagem para verso de cartas personalizado.
 - Upload de imagem para fundo de board personalizado.
 - Renomear e apagar temas personalizados.
+
+## Feedback sonoro
+
+- Efeitos de audio para feedback de jogadas válidas ("good") e inválidas ("bad").
+- Reprodução de sons aleatórios servidos diretamente do GitHub.
+- Sobreposição de múltiplos sons sem limite.
+- Redução do tamanho do APK ao evitar bundling de assets.
 
 ## Interface e adaptação ao dispositivo
 
