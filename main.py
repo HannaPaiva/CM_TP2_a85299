@@ -154,9 +154,6 @@ def main(page: ft.Page):
         label="{value}x",
     )
 
-    file_picker = ft.FilePicker()
-    page.services.append(file_picker)
-
     shared_prefs = ft.SharedPreferences()
     page.services.append(shared_prefs)
 
@@ -462,7 +459,7 @@ def main(page: ft.Page):
 
     async def pick_single_image(dialog_title, on_error=None):
         try:
-            files = await file_picker.pick_files(
+            files = await ft.FilePicker().pick_files(
                 dialog_title=dialog_title,
                 file_type=ft.FilePickerFileType.IMAGE,
                 allow_multiple=False,
@@ -479,7 +476,10 @@ def main(page: ft.Page):
         selected_file = files[0]
         selected_bytes = selected_file.bytes
         if selected_bytes is None and selected_file.path:
-            selected_bytes = Path(selected_file.path).read_bytes()
+            try:
+                selected_bytes = Path(selected_file.path).read_bytes()
+            except Exception:
+                selected_bytes = None
         if not selected_bytes:
             if on_error is not None:
                 on_error("Nao foi possivel ler a imagem escolhida.")

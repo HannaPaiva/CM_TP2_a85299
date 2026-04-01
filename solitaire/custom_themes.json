@@ -2,18 +2,18 @@
   "themes": {
     "zaheen_do_lol": {
       "label": "Zaheen Do Lol",
-      "page_bg": "#381805",
-      "header_bg": "#442311",
-      "panel_bg": "#532A15",
-      "panel_bg_alt": "#673F2A",
-      "board_bg": "#FD6D18",
-      "board_bg_alt": "#CF5914",
-      "chip_bg": "#9E4817",
-      "slot_bg": "#FD7F34",
-      "slot_border": "#798335",
+      "page_bg": "#0E020D",
+      "header_bg": "#9F5D3A",
+      "panel_bg": "#C07146",
+      "panel_bg_alt": "#D5865A",
+      "board_bg": "#410839",
+      "board_bg_alt": "#35072F",
+      "chip_bg": "#954B44",
+      "slot_bg": "#582651",
+      "slot_border": "#B84A7D",
       "text": "#F7F7F2",
-      "muted": "#F9D0B5",
-      "accent": "#5B6809",
+      "muted": "#C4B4BE",
+      "accent": "#A82261",
       "custom": true
     }
   },
@@ -24,7 +24,7 @@
       "suggested_theme": "zaheen_do_lol",
       "fit": "cover",
       "scale": 1.0,
-      "board_bg": "boards/zaheen_do_lol_board.jpg",
+      "board_bg": "boards/zaheen_do_lol_1775067840_board.png",
       "custom": true
     }
   },
