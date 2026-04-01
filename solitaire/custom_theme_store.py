@@ -13,6 +13,7 @@ interface, o ficheiro JSON e os assets guardados em disco.
 
 import json
 import re
+import time
 from pathlib import Path
 
 
@@ -382,7 +383,7 @@ def _save_board_bg_file(theme_name, image_bytes, original_filename):
     if extension not in SUPPORTED_BACK_EXTENSIONS:
         extension = ".jpg"
     CUSTOM_BOARDS_DIR.mkdir(parents=True, exist_ok=True)
-    file_name = f"{theme_name}_board{extension}"
+    file_name = f"{theme_name}_{int(time.time())}_board{extension}"
     (CUSTOM_BOARDS_DIR / file_name).write_bytes(image_bytes)
     return f"boards/{file_name}"
 
