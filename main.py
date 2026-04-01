@@ -154,6 +154,15 @@ def main(page: ft.Page):
         label="{value}x",
     )
 
+    volume_slider = ft.Slider(
+        min=0,
+        max=100,
+        divisions=20,
+        value=100,
+        label="{value}%",
+        expand=True,
+    )
+
     shared_prefs = ft.SharedPreferences()
     page.services.append(shared_prefs)
 
@@ -1151,6 +1160,11 @@ def main(page: ft.Page):
     board = GameBoard(page=page, settings=settings, on_win=on_win, on_change=refresh_hud)
     board.sound_player = ClientSoundPlayer(page)
     board.setup()
+
+    def _on_volume_change(e):
+        board.sound_player.set_volume((volume_slider.value or 0) / 100)
+
+    volume_slider.on_change = _on_volume_change
     timer_state = {
         "last_observed_elapsed": int(board.elapsed_seconds),
         "anchor_elapsed": int(board.elapsed_seconds),
@@ -3738,6 +3752,10 @@ Ou começa um jogo novo!''',
             run_spacing=12,
         )
 
+        volume_slider.active_color = theme["accent"]
+        volume_slider.inactive_color = theme["slot_border"]
+        volume_slider.thumb_color = theme["accent"]
+
         preview_label = (
             f"{BACK_OPTIONS[draft_card_back_name]['label']} + "
             f"{THEME_OPTIONS[draft_theme_name]['label']} + "
@@ -3751,6 +3769,12 @@ Ou começa um jogo novo!''',
                     spacing=16,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     controls=[
+                        surface_card(
+                            "Volume dos sons",
+                            "Ajusta o volume dos efeitos sonoros.",
+                            ft.Row(controls=[volume_slider], expand=True),
+                            ft.Icons.VOLUME_UP,
+                        ),
                         surface_card(
                             "Temas pre feitos",
                             "Muda tudo ou só a paleta",

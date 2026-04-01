@@ -29,6 +29,15 @@ contra JSON editado manualmente ou assets em falta.
 4. gera a paleta derivada
 5. persiste tudo no JSON
 
+### Nomes de ficheiros de board background
+
+`_save_board_bg_file()` inclui um timestamp Unix no nome do ficheiro gerado
+(formato: `{tema}_{timestamp}_board{ext}`). Isto garante que cada gravacao
+produz um URL unico, evitando que o WebView do Flet sirva uma versao
+em cache quando o utilizador substitui a imagem de fundo pelo mesmo tipo de
+ficheiro. O ficheiro anterior e sempre apagado por `update_custom_theme_board_bg()`
+antes de gravar o novo, pelo que nao ficam ficheiros orfaos.
+
 ### Atualizacao e remocao
 
 - `rename_custom_theme()`

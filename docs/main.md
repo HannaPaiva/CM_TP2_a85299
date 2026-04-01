@@ -24,6 +24,14 @@ UI e quando o estado deve ser salvo.
 `main(page)` cria widgets persistentes e estados temporarios de configuracao.
 Isto evita recriar a UI inteira a cada rota.
 
+### Seletor de ficheiros
+
+`pick_single_image()` cria um `ft.FilePicker()` novo a cada invocacao, em vez
+de reutilizar uma instancia global registada em `page.services`. Esta abordagem
+evita o erro `Control with ID N is not registered` que ocorria quando o picker
+persistente ficava com o ID invalidado apos um `render_route()`. O picker
+descartavel nao precisa de ser adicionado a `page.services`.
+
 ### Ponte com o board
 
 `refresh_hud()` e o callback que recebe mudancas do `GameBoard`.
