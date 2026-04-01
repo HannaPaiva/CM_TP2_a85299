@@ -60,16 +60,6 @@ class Slot(ft.Container):
             return self.pile[-1]
         return None
 
-    def get_top_three_cards(self):
-        """
-        Devolve as tres cartas mais acima da pilha.
-
-        Returns:
-            Lista com ate tres cartas do topo.
-        """
-        n = len(self.pile)
-        return self.pile[max(0, n - 3) :]
-
     def get_top_cards(self, count):
         """
         Devolve as `count` cartas mais acima da pilha.
@@ -83,17 +73,6 @@ class Slot(ft.Container):
         """
         n = len(self.pile)
         return self.pile[max(0, n - count) :]
-
-    def fan_top_three(self):
-        """
-        Faz o leque das tres cartas visiveis do topo.
-
-        Este metodo e util para a waste quando a compra e configurada para
-        mostrar varias cartas em simultaneo.
-        """
-        for i, card in enumerate(self.get_top_three_cards()):
-            card.left = self.left + self.solitaire.card_offset * i
-            card.visible = True
 
     def is_top_card(self, card):
         """

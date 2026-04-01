@@ -84,9 +84,3 @@ class ClientSoundPlayer:
 
         self.page.services.append(audio)
         self.page.update()
-
-    async def play_bad(self) -> None:
-        self._play("bad")
-
-    async def play_good(self) -> None:
-        self._play("good")
