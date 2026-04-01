@@ -1,95 +1,68 @@
 """
-Reproducao de efeitos sonoros no cliente Flet (telemóvel / web).
+Reproducao de efeitos sonoros no cliente Flet (telemovel / web / Android).
 
-Cada som e tocado criando um fta.Audio temporario no page.overlay.
-ReleaseMode.RELEASE liberta o recurso automaticamente no fim da reproducao.
+Os ficheiros de audio sao servidos diretamente do GitHub via raw URLs,
+eliminando a necessidade de assets bundled no APK.
 """
 
 from __future__ import annotations
 
 import random
-import shutil
-from pathlib import Path
 
 import flet as ft
 import flet_audio as fta
+from flet_audio.types import AudioState
 
 
 SoundCategory = str  # "bad" | "good"
 
+_BASE = "https://raw.githubusercontent.com/HannaPaiva/CM_TP2_a85299/main/assets/sounds"
+
+_SOUNDS: dict[SoundCategory, list[str]] = {
+    "bad": [
+        f"{_BASE}/bad/error_CDOxCYm.mp3",
+        f"{_BASE}/bad/gangnam-style-uaaaa-uaaao.mp3",
+        f"{_BASE}/bad/kai-cenat-suspense.mp3",
+        f"{_BASE}/bad/som-de-susto-youtuber.mp3",
+        f"{_BASE}/bad/sudden-suspense_0jhLorD.mp3",
+        f"{_BASE}/bad/the-alien-annihilation.mp3",
+        f"{_BASE}/bad/thud_AHM3W06.mp3",
+        f"{_BASE}/bad/trollface-smile.mp3",
+        f"{_BASE}/bad/violin-suspense.mp3",
+        f"{_BASE}/bad/yt1s_FU9XJKS.mp3",
+    ],
+    "good": [
+        f"{_BASE}/good/bass-boost-drop.mp3",
+        f"{_BASE}/good/sushi-dont-lie.mp3",
+    ],
+}
+
 
 class ClientSoundPlayer:
     """
-    Toca efeitos aleatorios a partir de assets/sounds/bad e assets/sounds/good.
+    Toca efeitos aleatorios a partir de URLs do GitHub.
 
-    Cada chamada cria um Audio no overlay, toca, e liberta automaticamente.
+    Cada chamada cria um Audio no services, toca, e liberta automaticamente.
     Varios sons podem sobrepor-se sem limite.
     """
 
     def __init__(self, page: ft.Page):
         self.page = page
-        self.assets_sound_root = Path("assets/sounds")
-        self.source_root = Path("sounds")
         self.effects_volume = 1.0
-        self.sync_sound_assets()
 
     def set_volume(self, value: float) -> None:
         self.effects_volume = max(0.0, min(1.0, float(value)))
 
-    def sync_sound_assets(self) -> None:
-        for sound_path in self.source_root.rglob("*"):
-            if not sound_path.is_file():
-                continue
-            relative_path = sound_path.relative_to(self.source_root)
-            asset_target = self.assets_sound_root / relative_path
-            asset_target.parent.mkdir(parents=True, exist_ok=True)
-            if asset_target.exists():
-                try:
-                    if asset_target.read_bytes() == sound_path.read_bytes():
-                        continue
-                except Exception:
-                    pass
-            shutil.copy2(sound_path, asset_target)
-
-    def list_sounds(self, category: SoundCategory) -> list[Path]:
-        sound_dir = self.assets_sound_root / category
-        if not sound_dir.exists():
-            return []
-        return sorted(
-            p for p in sound_dir.iterdir()
-            if p.is_file() and p.suffix.lower() in {".mp3", ".wav", ".ogg", ".m4a"}
-        )
-
-    def choose_sound(self, category: SoundCategory) -> Path | None:
-        sounds = self.list_sounds(category)
-        if not sounds:
-            return None
-        return random.choice(sounds)
-
-    def _asset_src(self, sound_path: Path) -> str:
-        relative = sound_path.relative_to(Path("assets")).as_posix()
-        try:
-            from urllib.parse import urlparse
-            page_url = getattr(self.page, "url", None) or ""
-            if page_url.startswith("http://") or page_url.startswith("https://"):
-                p = urlparse(page_url)
-                base = f"{p.scheme}://{p.netloc}"
-                return f"{base}/{relative}"
-        except Exception:
-            pass
-        return relative
-
     def _play(self, category: SoundCategory) -> None:
-        sound_path = self.choose_sound(category)
-        if sound_path is None:
+        sounds = _SOUNDS.get(category, [])
+        if not sounds:
             return
 
-        src = self._asset_src(sound_path)
-
+        src = random.choice(sounds)
         audio: fta.Audio | None = None
 
         def on_state_change(e):
-            if e.state in ("completed", "stopped"):
+            if e.state in (AudioState.COMPLETED, AudioState.STOPPED):
                 try:
                     self.page.services.remove(audio)
                     self.page.update()
